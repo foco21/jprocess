@@ -35,21 +35,30 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_gravity="top|center_horizontal">
+        android:layout_gravity="top|center_horizontal"
+        android:background="#80000000">
 
         <Spinner
             android:id="@+id/lens_spinner"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_margin="16dp" />
+            android:layout_margin="8dp" />
 
         <Spinner
             android:id="@+id/format_spinner"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_margin="16dp" />
+            android:layout_margin="8dp" />
+
+        <Switch
+            android:id="@+id/watermark_switch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Watermark"
+            android:textColor="@android:color/white"
+            android:layout_margin="8dp"/>
 
     </LinearLayout>
 

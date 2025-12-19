@@ -13,7 +13,7 @@ Introduction
 unprocess uses the [Camera2 API][1] to capture raw sensor data from the camera before being
 converted to a human-viewable file format.
 
-The app now allows users to select individual physical cameras (wide, telephoto, ultra-wide, etc.) from a list and switch between them directly on the camera screen. Users can choose between RAW (.dng), JPEG (.jpg), or PNG (.png) for the final, saved file. This ensures every photo is purely optical and unprocessed.
+The app now allows users to select individual physical cameras (wide, telephoto, ultra-wide, etc.) from a list and switch between them directly on the camera screen. Users can choose between RAW (.dng), JPEG (.jpg), or PNG (.png) for the final, saved file, and can optionally enable a watermark with device and shot information. This ensures every photo is purely optical and unprocessed.
 
 [1]: https://developer.android.com/reference/android/hardware/camera2/package-summary.html
 

@@ -18,19 +18,8 @@ package com.reilandeubank.unprocess.fragments
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Color
-import android.graphics.ImageFormat
-import android.hardware.camera2.CameraCaptureSession
-import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CameraDevice
-import android.hardware.camera2.CameraManager
-import android.hardware.camera2.CameraMetadata
-import android.hardware.camera2.CaptureRequest
-import android.hardware.camera2.CaptureResult
-import android.hardware.camera2.DngCreator
-import android.hardware.camera2.TotalCaptureResult
+import android.graphics.* 
+import android.hardware.camera2.*
 import android.media.Image
 import android.media.ImageReader
 import android.os.Build
@@ -40,6 +29,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.provider.MediaStore
 import android.util.Log
+import android.util.Size
 import android.view.LayoutInflater
 import android.view.Surface
 import android.view.SurfaceHolder
@@ -63,10 +53,12 @@ import com.reilandeubank.unprocess.utils.getPreviewOutputSize
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.io.ByteArrayOutputStream
 import java.io.Closeable
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ArrayBlockingQueue
@@ -108,11 +100,8 @@ class CameraFragment : Fragment() {
     /** Performs recording animation of flashing screen */
     private val animationTask: Runnable by lazy {
         Runnable {
-            // Flash white animation
             fragmentCameraBinding.overlay.background = Color.argb(150, 255, 255, 255).toDrawable()
-            // Wait for ANIMATION_FAST_MILLIS
             fragmentCameraBinding.overlay.postDelayed({
-                // Remove white flash animation
                 fragmentCameraBinding.overlay.background = null
             }, CameraActivity.ANIMATION_FAST_MILLIS)
         }
@@ -134,11 +123,11 @@ class CameraFragment : Fragment() {
     private lateinit var relativeOrientation: OrientationLiveData
 
     // State variables
-    private data class CameraInfo(val name: String, val cameraId: String)
+    private data class CameraInfo(val name: String, val cameraId: String, val supportedFormats: List<String>)
     private lateinit var availableLenses: List<CameraInfo>
-    private val outputFormats = listOf("RAW", "JPEG", "PNG")
     private var selectedLens: CameraInfo? = null
-    private var selectedFormat: String = outputFormats[0]
+    private var selectedFormat: String? = null
+    private var isWatermarkEnabled: Boolean = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -163,7 +152,7 @@ class CameraFragment : Fragment() {
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = Unit
             override fun surfaceCreated(holder: SurfaceHolder) {
                 lifecycleScope.launch(Dispatchers.Main) {
-                    setupSpinners()
+                    setupSpinnersAndWatermark()
                     initializeCamera()
                 }
             }
@@ -173,7 +162,7 @@ class CameraFragment : Fragment() {
         fragmentCameraBinding.switchCameraButton.visibility = View.GONE
     }
 
-    private fun setupSpinners() {
+    private fun setupSpinnersAndWatermark() {
         availableLenses = enumerateCameras(cameraManager)
         val lensNames = availableLenses.map { it.name }
 
@@ -183,74 +172,110 @@ class CameraFragment : Fragment() {
         fragmentCameraBinding.lensSpinner.adapter = lensAdapter
         fragmentCameraBinding.lensSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                selectedLens = availableLenses[position]
-                lifecycleScope.launch(Dispatchers.Main) {
-                    if (::camera.isInitialized) camera.close()
-                    if (::imageReader.isInitialized) imageReader.close()
-                    initializeCamera()
+                if (selectedLens?.cameraId != availableLenses[position].cameraId) {
+                    selectedLens = availableLenses[position]
+                    updateFormatSpinner()
                 }
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
-        // Setup format spinner
-        val formatAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, outputFormats)
-        formatAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        fragmentCameraBinding.formatSpinner.adapter = formatAdapter
-        fragmentCameraBinding.formatSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                selectedFormat = outputFormats[position]
+        // Setup watermark switch
+        fragmentCameraBinding.watermarkSwitch.setOnCheckedChangeListener { _, isChecked ->
+            isWatermarkEnabled = isChecked
+        }
+    }
+
+    private fun updateFormatSpinner() {
+        selectedLens?.let { lens ->
+            val formatAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, lens.supportedFormats)
+            formatAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            fragmentCameraBinding.formatSpinner.adapter = formatAdapter
+            fragmentCameraBinding.formatSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    val newFormat = lens.supportedFormats[position]
+                    if (selectedFormat != newFormat) {
+                        selectedFormat = newFormat
+                        lifecycleScope.launch(Dispatchers.Main) {
+                            if (::camera.isInitialized) camera.close()
+                            if (::imageReader.isInitialized) imageReader.close()
+                            initializeCamera()
+                        }
+                    }
+                }
+                override fun onNothingSelected(parent: AdapterView<*>?) {}
             }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
+            if (lens.supportedFormats.isNotEmpty()) {
+                selectedFormat = lens.supportedFormats[0]
+                fragmentCameraBinding.formatSpinner.setSelection(0)
+            } else {
+                 selectedFormat = null
+            }
         }
     }
 
     @SuppressLint("InlinedApi")
     private fun enumerateCameras(cameraManager: CameraManager): List<CameraInfo> {
         val cameraInfoList = mutableListOf<CameraInfo>()
-        cameraManager.cameraIdList.filter {
-            val characteristics = cameraManager.getCameraCharacteristics(it)
-            val capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
-            capabilities?.contains(CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_BACKWARD_COMPATIBLE) ?: false
-        }.forEach { id ->
+        val allCameraIds = mutableSetOf<String>()
+
+        cameraManager.cameraIdList.forEach { allCameraIds.add(it) }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            cameraManager.cameraIdList.forEach { cameraId ->
+                val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+                val capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)!!
+                if (capabilities.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA)) {
+                    allCameraIds.addAll(characteristics.physicalCameraIds)
+                }
+            }
+        }
+
+        allCameraIds.forEach { id ->
             val characteristics = cameraManager.getCameraCharacteristics(id)
-            val orientation = characteristics.get(CameraCharacteristics.LENS_FACING)
             val capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)!!
             val outputFormats = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!.outputFormats
 
-            if (orientation == CameraCharacteristics.LENS_FACING_BACK &&
-                capabilities.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) &&
-                outputFormats.contains(ImageFormat.RAW_SENSOR)) {
+            val supportedFormats = mutableListOf<String>()
+            if (outputFormats.contains(ImageFormat.RAW_SENSOR)) {
+                supportedFormats.add("RAW")
+                supportedFormats.add("PNG") // PNG is derived from RAW
+            }
+            if (outputFormats.contains(ImageFormat.JPEG)) {
+                supportedFormats.add("JPEG")
+            }
+
+            if (supportedFormats.isNotEmpty()) {
+                val orientation = characteristics.get(CameraCharacteristics.LENS_FACING)
                 val focalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
-                val lensType = if (focalLengths != null && focalLengths.isNotEmpty()) {
-                    when {
-                        focalLengths.minOrNull()!! < 3.0f -> "Ultra-Wide"
-                        focalLengths.minOrNull()!! < 6.0f -> "Wide"
-                        else -> "Telephoto"
+                val lensName = when (orientation) {
+                    CameraCharacteristics.LENS_FACING_FRONT -> "Front"
+                    CameraCharacteristics.LENS_FACING_EXTERNAL -> "External"
+                    CameraCharacteristics.LENS_FACING_BACK -> {
+                        if (focalLengths != null && focalLengths.isNotEmpty()) {
+                            when {
+                                focalLengths.minOrNull()!! < 3.0f -> "Ultra-Wide"
+                                focalLengths.minOrNull()!! < 6.0f -> "Wide"
+                                else -> "Telephoto"
+                            }
+                        } else {
+                            "Back"
+                        }
                     }
-                } else {
-                    "Back"
+                    else -> "Unknown"
                 }
-                cameraInfoList.add(CameraInfo(lensType, id))
+                cameraInfoList.add(CameraInfo(lensName, id, supportedFormats.distinct()))
             }
         }
-        if (cameraInfoList.isEmpty()) {
-            // Fallback to first compatible back camera if no specific physical lens found
-            val fallbackId = cameraManager.cameraIdList.firstOrNull {
-                val characteristics = cameraManager.getCameraCharacteristics(it)
-                characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
-            }
-            if (fallbackId != null) {
-                cameraInfoList.add(CameraInfo("Back Camera", fallbackId))
-            }
-        }
-        return cameraInfoList
+
+        return cameraInfoList.distinctBy { it.cameraId }
     }
 
     private fun initializeCamera() = lifecycleScope.launch(Dispatchers.Main) {
         if (selectedLens == null) {
             if (availableLenses.isNotEmpty()) {
                 selectedLens = availableLenses[0]
+                updateFormatSpinner()
             } else {
                 Log.e(TAG, "No suitable cameras found.")
                 return@launch
@@ -268,18 +293,26 @@ class CameraFragment : Fragment() {
             })
         }
 
-        val previewSize = getPreviewOutputSize(
-            fragmentCameraBinding.viewFinder.display,
-            characteristics,
-            SurfaceHolder::class.java
-        )
+        val previewSize = getPreviewOutputSize(fragmentCameraBinding.viewFinder.display, characteristics, SurfaceHolder::class.java)
         fragmentCameraBinding.viewFinder.setAspectRatio(previewSize.width, previewSize.height)
 
-        camera = openCamera(cameraManager, cameraId, cameraHandler)
+        try {
+            camera = openCamera(cameraManager, cameraId, cameraHandler)
+        } catch (e: CameraAccessException) {
+            Log.e(TAG, "Failed to open camera $cameraId: ${e.message}")
+            return@launch
+        }
 
-        val pixelFormat = ImageFormat.RAW_SENSOR
-        val size = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
-            .getOutputSizes(pixelFormat).maxByOrNull { it.height * it.width }!!
+        val pixelFormat = when (selectedFormat) {
+            "RAW", "PNG" -> ImageFormat.RAW_SENSOR
+            "JPEG" -> ImageFormat.JPEG
+            else -> {
+                Log.e(TAG, "No supported format selected.")
+                return@launch
+            }
+        }
+
+        val size = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!.getOutputSizes(pixelFormat).maxByOrNull { it.height * it.width }!!
         imageReader = ImageReader.newInstance(size.width, size.height, pixelFormat, IMAGE_BUFFER_SIZE)
 
         val targets = listOf(fragmentCameraBinding.viewFinder.holder.surface, imageReader.surface)
@@ -317,26 +350,31 @@ class CameraFragment : Fragment() {
         cameraId: String,
         handler: Handler? = null
     ): CameraDevice = suspendCancellableCoroutine { cont ->
-        manager.openCamera(cameraId, object : CameraDevice.StateCallback() {
-            override fun onOpened(device: CameraDevice) = cont.resume(device)
-            override fun onDisconnected(device: CameraDevice) {
-                Log.w(TAG, "Camera $cameraId has been disconnected")
-                requireActivity().finish()
-            }
-            override fun onError(device: CameraDevice, error: Int) {
-                val msg = when (error) {
-                    CameraDevice.StateCallback.ERROR_CAMERA_DEVICE -> "Fatal (device)"
-                    CameraDevice.StateCallback.ERROR_CAMERA_DISABLED -> "Device policy"
-                    CameraDevice.StateCallback.ERROR_CAMERA_IN_USE -> "Camera in use"
-                    CameraDevice.StateCallback.ERROR_CAMERA_SERVICE -> "Fatal (service)"
-                    CameraDevice.StateCallback.ERROR_MAX_CAMERAS_IN_USE -> "Maximum cameras in use"
-                    else -> "Unknown"
+        try {
+            manager.openCamera(cameraId, object : CameraDevice.StateCallback() {
+                override fun onOpened(device: CameraDevice) = cont.resume(device)
+                override fun onDisconnected(device: CameraDevice) {
+                    Log.w(TAG, "Camera $cameraId has been disconnected")
+                    requireActivity().finish()
                 }
-                val exc = RuntimeException("Camera $cameraId error: ($error) $msg")
-                Log.e(TAG, exc.message, exc)
-                if (cont.isActive) cont.resumeWithException(exc)
-            }
-        }, handler)
+                override fun onError(device: CameraDevice, error: Int) {
+                    val msg = when (error) {
+                        CameraDevice.StateCallback.ERROR_CAMERA_DEVICE -> "Fatal (device)"
+                        CameraDevice.StateCallback.ERROR_CAMERA_DISABLED -> "Device policy"
+                        CameraDevice.StateCallback.ERROR_CAMERA_IN_USE -> "Camera in use"
+                        CameraDevice.StateCallback.ERROR_CAMERA_SERVICE -> "Fatal (service)"
+                        CameraDevice.StateCallback.ERROR_MAX_CAMERAS_IN_USE -> "Maximum cameras in use"
+                        else -> "Unknown"
+                    }
+                    val exc = RuntimeException("Camera $cameraId error: ($error) $msg")
+                    Log.e(TAG, exc.message, exc)
+                    if (cont.isActive) cont.resumeWithException(exc)
+                }
+            }, handler)
+        } catch (e: CameraAccessException) {
+            Log.e(TAG, "Failed to open camera $cameraId: ${e.message}")
+            cont.resumeWithException(e)
+        }
     }
 
     private suspend fun createCaptureSession(
@@ -354,7 +392,7 @@ class CameraFragment : Fragment() {
         }, handler)
     }
 
-    private suspend fun takePhoto(): CombinedCaptureResult = suspendCoroutine { cont ->
+    private suspend fun takePhoto(): CombinedCaptureResult = suspendCancellableCoroutine { cont ->
         while (imageReader.acquireNextImage() != null) {}
 
         val imageQueue = ArrayBlockingQueue<Image>(IMAGE_BUFFER_SIZE)
@@ -398,97 +436,140 @@ class CameraFragment : Fragment() {
             }
         }, cameraHandler)
     }
+    
+    private fun addWatermark(bitmap: Bitmap): Bitmap {
+        val newBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+        val canvas = Canvas(newBitmap)
+        val paint = Paint().apply {
+            color = Color.WHITE
+            textSize = 48f
+            isAntiAlias = true
+        }
+        val text = "${Build.MODEL} - ${selectedLens?.name} - $selectedFormat"
+        val dateText = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+        canvas.drawText(text, 20f, newBitmap.height - 80f, paint)
+        canvas.drawText(dateText, 20f, newBitmap.height - 30f, paint)
+        return newBitmap
+    }
+
+    private fun rotateBitmap(bitmap: Bitmap, rotationDegrees: Int): Bitmap {
+        val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
 
     private suspend fun saveResult(result: CombinedCaptureResult): File = suspendCoroutine { cont ->
+        val outputFormat = selectedFormat ?: return@suspendCoroutine
+        val orientation = result.orientation
+
+        var bitmap: Bitmap? = null
+        var bytes: ByteArray? = null
+
+        // Get the image data
         when (result.format) {
             ImageFormat.RAW_SENSOR -> {
                 val dngCreator = DngCreator(characteristics, result.metadata)
-                try {
-                    when (selectedFormat) {
-                        "JPEG", "PNG" -> {
-                            val rawImage = result.image
-                            // Create a temporary DNG file for bitmap conversion
-                            val tempDngFile = File(requireContext().cacheDir, "temp.dng")
-                            FileOutputStream(tempDngFile).use { outputStream ->
-                                dngCreator.writeImage(outputStream, rawImage)
-                            }
-
-                            val bitmap = BitmapFactory.decodeFile(tempDngFile.absolutePath)
-                            tempDngFile.delete()
-
-                            val (extension, mimeType, format) = when (selectedFormat) {
-                                "JPEG" -> Triple("jpg", "image/jpeg", Bitmap.CompressFormat.JPEG)
-                                "PNG" -> Triple("png", "image/png", Bitmap.CompressFormat.PNG)
-                                else -> throw RuntimeException("Unknown format")
-                            }
-                            val filename = "IMG_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.$extension"
-
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                val contentValues = android.content.ContentValues().apply {
-                                    put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
-                                    put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-                                    put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DCIM}/Camera")
-                                }
-                                val resolver = requireContext().contentResolver
-                                val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-                                    ?: throw IOException("Failed to create MediaStore entry")
-                                resolver.openOutputStream(uri)?.use { stream -> bitmap.compress(format, 100, stream) }
-
-                                if (selectedFormat == "JPEG") {
-                                    resolver.openFileDescriptor(uri, "rw")?.use { pfd ->
-                                        ExifInterface(pfd.fileDescriptor).apply {
-                                            setAttribute(ExifInterface.TAG_ORIENTATION, result.orientation.toString())
-                                            saveAttributes()
-                                        }
-                                    }
-                                }
-                                cont.resume(File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera"), filename))
-                            } else {
-                                val file = File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera").apply { mkdirs() }, filename)
-                                FileOutputStream(file).use { stream -> bitmap.compress(format, 100, stream) }
-                                if (selectedFormat == "JPEG") {
-                                    ExifInterface(file.absolutePath).apply {
-                                        setAttribute(ExifInterface.TAG_ORIENTATION, result.orientation.toString())
-                                        saveAttributes()
-                                    }
-                                }
-                                cont.resume(file)
-                            }
-                            bitmap.recycle()
+                if (outputFormat == "RAW") {
+                    dngCreator.setOrientation(orientation)
+                    val filename = "RAW_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.dng"
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val contentValues = android.content.ContentValues().apply {
+                            put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                            put(MediaStore.MediaColumns.MIME_TYPE, "image/x-adobe-dng")
+                            put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DCIM}/Camera")
                         }
-                        "RAW" -> {
-                            dngCreator.setOrientation(result.orientation)
-                            val filename = "RAW_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.dng"
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                val contentValues = android.content.ContentValues().apply {
-                                    put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
-                                    put(MediaStore.MediaColumns.MIME_TYPE, "image/x-adobe-dng")
-                                    put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DCIM}/Camera")
-                                }
-                                val resolver = requireContext().contentResolver
-                                val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-                                    ?: throw IOException("Failed to create MediaStore entry")
-                                resolver.openOutputStream(uri)?.use { stream -> dngCreator.writeImage(stream, result.image) }
-                                cont.resume(File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera"), filename))
-                            } else {
-                                val file = File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera").apply { mkdirs() }, filename)
-                                FileOutputStream(file).use { outputStream -> dngCreator.writeImage(outputStream, result.image) }
-                                cont.resume(file)
-                            }
-                        }
+                        val resolver = requireContext().contentResolver
+                        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                            ?: throw IOException("Failed to create MediaStore entry")
+                        resolver.openOutputStream(uri)?.use { stream -> dngCreator.writeImage(stream, result.image) }
+                        cont.resume(File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera"), filename))
+                    } else {
+                        val file = File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera").apply { mkdirs() }, filename)
+                        FileOutputStream(file).use { outputStream -> dngCreator.writeImage(outputStream, result.image) }
+                        cont.resume(file)
                     }
-                } catch (exc: IOException) {
-                    Log.e(TAG, "Unable to write image to external storage", exc)
-                    cont.resumeWithException(exc)
+                    return@suspendCoroutine
+                } else {
+                     val tempDngFile = File(requireContext().cacheDir, "temp.dng")
+                    FileOutputStream(tempDngFile).use { outputStream ->
+                        dngCreator.writeImage(outputStream, result.image)
+                    }
+                    bitmap = BitmapFactory.decodeFile(tempDngFile.absolutePath)
+                    tempDngFile.delete()
                 }
             }
-            else -> {
-                val exc = RuntimeException("Unknown image format: ${result.image.format}")
-                Log.e(TAG, exc.message, exc)
-                cont.resumeWithException(exc)
+            ImageFormat.JPEG -> {
+                val buffer = result.image.planes[0].buffer
+                bytes = ByteArray(buffer.remaining())
+                buffer.get(bytes)
+                bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
             }
+            else -> cont.resumeWithException(RuntimeException("Unknown image format: ${result.image.format}"))
+        }
+
+        if (bitmap != null) {
+             // Apply rotation if needed (for PNG)
+            val rotationDegrees = when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> 90
+                ExifInterface.ORIENTATION_ROTATE_180 -> 180
+                ExifInterface.ORIENTATION_ROTATE_270 -> 270
+                else -> 0
+            }
+            if (rotationDegrees != 0) {
+                 bitmap = rotateBitmap(bitmap, rotationDegrees)
+            }
+
+            // Apply watermark if enabled
+            if (isWatermarkEnabled) {
+                bitmap = addWatermark(bitmap)
+            }
+
+            val (extension, mimeType, format) = when (outputFormat) {
+                "JPEG" -> Triple("jpg", "image/jpeg", Bitmap.CompressFormat.JPEG)
+                "PNG" -> Triple("png", "image/png", Bitmap.CompressFormat.PNG)
+                else -> throw RuntimeException("Unsupported format for bitmap saving")
+            }
+            val filename = "IMG_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.$extension"
+            
+            val outputStream = ByteArrayOutputStream()
+            bitmap.compress(format, 100, outputStream)
+            val finalBytes = outputStream.toByteArray()
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val contentValues = android.content.ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                    put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DCIM}/Camera")
+                }
+                val resolver = requireContext().contentResolver
+                val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                    ?: throw IOException("Failed to create MediaStore entry")
+                resolver.openOutputStream(uri)?.use { it.write(finalBytes) }
+                
+                if (outputFormat == "JPEG") {
+                     resolver.openFileDescriptor(uri, "rw")?.use { pfd ->
+                        ExifInterface(pfd.fileDescriptor).apply {
+                            setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString())
+                            saveAttributes()
+                        }
+                    }
+                }
+
+                cont.resume(File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera"), filename))
+            } else {
+                val file = File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera").apply { mkdirs() }, filename)
+                FileOutputStream(file).use { it.write(finalBytes) }
+                 if (outputFormat == "JPEG") {
+                    ExifInterface(file.absolutePath).apply {
+                        setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString())
+                        saveAttributes()
+                    }
+                }
+                cont.resume(file)
+            }
+            bitmap.recycle()
         }
     }
+
 
     override fun onStop() {
         super.onStop()
