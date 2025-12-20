@@ -50,6 +50,15 @@
             </intent-filter>
 
         </activity>
+        <activity
+            android:name="com.reilandeubank.unprocess.AboutActivity"
+            android:label="About"
+            android:parentActivityName="com.reilandeubank.unprocess.CameraActivity"
+            android:theme="@style/AppTheme">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value="com.reilandeubank.unprocess.CameraActivity" />
+        </activity>
     </application>
 
 </manifest>
