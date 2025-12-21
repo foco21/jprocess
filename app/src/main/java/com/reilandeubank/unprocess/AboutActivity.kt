@@ -13,7 +13,7 @@ class AboutActivity : AppCompatActivity() {
         activityAboutBinding = ActivityAboutBinding.inflate(layoutInflater)
         setContentView(activityAboutBinding.root)
 
-        val version = "0.0.3"
+        val version = "0.0.4"
         val appName = "junproccess"
         val forkName = "juneunprocess"
         val originalProjectLink = "https://github.com/reilandeubank/unprocess"
@@ -29,6 +29,8 @@ class AboutActivity : AppCompatActivity() {
             - androidx.exifinterface:exifinterface:1.3.7
             - com.github.bumptech.glide:glide:4.16.0
             - org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3
+            - androidx.databinding:viewbinding:8.7.2
+            - org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.5.21
         """.trimIndent()
 
         val licenseText = """

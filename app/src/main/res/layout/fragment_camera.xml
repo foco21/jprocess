@@ -71,6 +71,16 @@
     </LinearLayout>
 
     <ImageButton
+        android:id="@+id/gallery_button"
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="24dp"
+        android:layout_marginBottom="12dp"
+        android:scaleType="fitCenter"
+        android:background="@android:drawable/ic_menu_gallery" />
+
+    <ImageButton
         android:id="@+id/capture_button"
         android:layout_width="96dp"
         android:layout_height="96dp"

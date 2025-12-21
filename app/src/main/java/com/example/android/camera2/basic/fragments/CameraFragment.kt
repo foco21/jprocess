@@ -19,10 +19,12 @@ package com.reilandeubank.unprocess.fragments
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.* 
 import android.hardware.camera2.*
 import android.media.Image
 import android.media.ImageReader
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -38,13 +40,17 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.Toast
 import androidx.core.graphics.drawable.toDrawable
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.exifinterface.media.ExifInterface
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Observer
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavController
 import androidx.navigation.Navigation
+import com.bumptech.glide.Glide
 import com.reilandeubank.unprocess.AboutActivity
 import com.reilandeubank.unprocess.CameraActivity
 import com.reilandeubank.unprocess.R
@@ -131,6 +137,10 @@ class CameraFragment : Fragment() {
     private var selectedFormat: String? = null
     private var isWatermarkEnabled: Boolean = false
 
+    private val prefs: SharedPreferences by lazy {
+        requireContext().getSharedPreferences("unprocess_prefs", Context.MODE_PRIVATE)
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -149,10 +159,17 @@ class CameraFragment : Fragment() {
             startActivity(intent)
         }
 
-        fragmentCameraBinding.captureButton.setOnApplyWindowInsetsListener { v, insets ->
-            v.translationX = (-insets.systemWindowInsetRight).toFloat()
-            v.translationY = (-insets.systemWindowInsetBottom).toFloat()
-            insets.consumeSystemWindowInsets()
+        fragmentCameraBinding.galleryButton.setOnClickListener {
+            val intent = Intent(Intent.ACTION_VIEW)
+            intent.type = "image/*"
+            startActivity(intent)
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(fragmentCameraBinding.captureButton) { v, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.translationX = (-insets.right).toFloat()
+            v.translationY = (-insets.bottom).toFloat()
+            WindowInsetsCompat.CONSUMED
         }
 
         fragmentCameraBinding.viewFinder.holder.addCallback(object : SurfaceHolder.Callback {
@@ -168,6 +185,25 @@ class CameraFragment : Fragment() {
 
         // The switch camera button is now gone
         fragmentCameraBinding.switchCameraButton.visibility = View.GONE
+
+        loadThumbnail()
+    }
+
+    private fun loadThumbnail() {
+        val cameraDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera")
+        val images = cameraDir.listFiles { file ->
+            val name = file.name.lowercase(Locale.ROOT)
+            name.endsWith(".jpg") || name.endsWith(".png") || name.endsWith(".dng")
+        }
+
+        if (images != null && images.isNotEmpty()) {
+            val latestImage = images.maxByOrNull { it.lastModified() }
+            if (latestImage != null) {
+                Glide.with(this)
+                    .load(latestImage)
+                    .into(fragmentCameraBinding.galleryButton)
+            }
+        }
     }
 
     private fun setupSpinnersAndWatermark() {
@@ -182,6 +218,7 @@ class CameraFragment : Fragment() {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 if (selectedLens?.cameraId != availableLenses[position].cameraId) {
                     selectedLens = availableLenses[position]
+                    selectedFormat = null // Force re-selection of format
                     updateFormatSpinner()
                 }
             }
@@ -199,11 +236,23 @@ class CameraFragment : Fragment() {
             val formatAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, lens.supportedFormats)
             formatAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
             fragmentCameraBinding.formatSpinner.adapter = formatAdapter
+
+            val preferredFormat = prefs.getString("preferred_format", null)
+            var selection = 0
+            if (preferredFormat != null) {
+                if (lens.supportedFormats.contains(preferredFormat)) {
+                    selection = lens.supportedFormats.indexOf(preferredFormat)
+                } else {
+                    Toast.makeText(requireContext(), "Unsupported format🥲, defaulting to ${lens.supportedFormats[0]}", Toast.LENGTH_SHORT).show()
+                }
+            }
+
             fragmentCameraBinding.formatSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                     val newFormat = lens.supportedFormats[position]
                     if (selectedFormat != newFormat) {
                         selectedFormat = newFormat
+                        prefs.edit().putString("preferred_format", newFormat).apply()
                         lifecycleScope.launch(Dispatchers.Main) {
                             if (::camera.isInitialized) camera.close()
                             if (::imageReader.isInitialized) imageReader.close()
@@ -213,12 +262,8 @@ class CameraFragment : Fragment() {
                 }
                 override fun onNothingSelected(parent: AdapterView<*>?) {}
             }
-            if (lens.supportedFormats.isNotEmpty()) {
-                selectedFormat = lens.supportedFormats[0]
-                fragmentCameraBinding.formatSpinner.setSelection(0)
-            } else {
-                 selectedFormat = null
-            }
+
+            fragmentCameraBinding.formatSpinner.setSelection(selection)
         }
     }
 
@@ -340,6 +385,7 @@ class CameraFragment : Fragment() {
                     val output = saveResult(result)
                     Log.d(TAG, "Image saved: ${output.absolutePath}")
                     lifecycleScope.launch(Dispatchers.Main) {
+                        loadThumbnail()
                         navController.navigate(
                             CameraFragmentDirections.actionCameraToJpegViewer(output.absolutePath)
                                 .setOrientation(result.orientation)
