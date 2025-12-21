@@ -131,11 +131,12 @@ class CameraFragment : Fragment() {
     private lateinit var relativeOrientation: OrientationLiveData
 
     // State variables
-    private data class CameraInfo(val name: String, val cameraId: String, val supportedFormats: List<String>)
+    private data class CameraInfo(val name: String, val cameraId: String, val supportedFormats: List<String>, val isLogicalCamera: Boolean)
     private lateinit var availableLenses: List<CameraInfo>
     private var selectedLens: CameraInfo? = null
     private var selectedFormat: String? = null
     private var isWatermarkEnabled: Boolean = false
+    private var zoomRatio: Float = 1.0f
 
     private val prefs: SharedPreferences by lazy {
         requireContext().getSharedPreferences("unprocess_prefs", Context.MODE_PRIVATE)
@@ -218,6 +219,11 @@ class CameraFragment : Fragment() {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 if (selectedLens?.cameraId != availableLenses[position].cameraId) {
                     selectedLens = availableLenses[position]
+
+                    if (selectedLens?.name?.contains("Telephoto") == true) {
+                        zoomRatio = characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM)!!
+                    }
+
                     selectedFormat = null // Force re-selection of format
                     updateFormatSpinner()
                 }
@@ -270,21 +276,8 @@ class CameraFragment : Fragment() {
     @SuppressLint("InlinedApi")
     private fun enumerateCameras(cameraManager: CameraManager): List<CameraInfo> {
         val cameraInfoList = mutableListOf<CameraInfo>()
-        val allCameraIds = mutableSetOf<String>()
 
-        cameraManager.cameraIdList.forEach { allCameraIds.add(it) }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            cameraManager.cameraIdList.forEach { cameraId ->
-                val characteristics = cameraManager.getCameraCharacteristics(cameraId)
-                val capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)!!
-                if (capabilities.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA)) {
-                    allCameraIds.addAll(characteristics.physicalCameraIds)
-                }
-            }
-        }
-
-        allCameraIds.forEach { id ->
+        cameraManager.cameraIdList.forEach { id ->
             val characteristics = cameraManager.getCameraCharacteristics(id)
             val capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)!!
             val outputFormats = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!.outputFormats
@@ -301,7 +294,8 @@ class CameraFragment : Fragment() {
             if (supportedFormats.isNotEmpty()) {
                 val orientation = characteristics.get(CameraCharacteristics.LENS_FACING)
                 val focalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
-                val lensName = when (orientation) {
+
+                var lensName = when (orientation) {
                     CameraCharacteristics.LENS_FACING_FRONT -> "Front"
                     CameraCharacteristics.LENS_FACING_EXTERNAL -> "External"
                     CameraCharacteristics.LENS_FACING_BACK -> {
@@ -317,7 +311,13 @@ class CameraFragment : Fragment() {
                     }
                     else -> "Unknown"
                 }
-                cameraInfoList.add(CameraInfo(lensName, id, supportedFormats.distinct()))
+
+                val isLogical = capabilities.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA)
+                if (isLogical) {
+                    lensName += " [logical]"
+                }
+
+                cameraInfoList.add(CameraInfo(lensName, id, supportedFormats.distinct(), isLogical))
             }
         }
 
@@ -336,6 +336,10 @@ class CameraFragment : Fragment() {
         }
         val cameraId = selectedLens!!.cameraId
         characteristics = cameraManager.getCameraCharacteristics(cameraId)
+
+        if (selectedLens!!.isLogicalCamera) {
+            Toast.makeText(requireContext(), "Lens may switch dynamically on this device.", Toast.LENGTH_LONG).show()
+        }
 
         if (::relativeOrientation.isInitialized) {
             relativeOrientation.removeObservers(viewLifecycleOwner)
@@ -372,8 +376,13 @@ class CameraFragment : Fragment() {
 
         session = createCaptureSession(camera, targets, cameraHandler)
 
-        val captureRequest = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-            .apply { addTarget(fragmentCameraBinding.viewFinder.holder.surface) }
+        val captureRequest = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
+            addTarget(fragmentCameraBinding.viewFinder.holder.surface)
+
+            if (selectedLens?.name?.contains("Telephoto") == true) {
+                set(CaptureRequest.SCALER_CROP_REGION, Rect(0, 0, size.width, size.height))
+            }
+        }
 
         session.setRepeatingRequest(captureRequest.build(), null, cameraHandler)
 
