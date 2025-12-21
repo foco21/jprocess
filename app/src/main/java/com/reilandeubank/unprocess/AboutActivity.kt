@@ -13,10 +13,19 @@ class AboutActivity : AppCompatActivity() {
         activityAboutBinding = ActivityAboutBinding.inflate(layoutInflater)
         setContentView(activityAboutBinding.root)
 
-        val version = "0.0.7"
+        val version = "0.0.8"
         val appName = "junproccess"
         val forkName = "juneunprocess"
         val originalProjectLink = "https://github.com/reilandeubank/unprocess"
+        val attributionText = """
+            Based on: Unprocess by Reilandeubank (Apache-2.0)
+            $originalProjectLink
+            
+            Modifications and improvements by June (logical camera support, multi-format saving, bug fixes, device compatibility).
+
+            Want to contribute to JuneProcess? Consider supporting both projects! 😊
+            JuneProcess wouldn’t be possible without Unprocess and the incredible work by Reilandeubank
+        """.trimIndent()
 
         val thirdPartyLibraries = """
             - androidx.core:core-ktx:1.12.0
@@ -215,7 +224,7 @@ class AboutActivity : AppCompatActivity() {
 
         activityAboutBinding.appNameAndVersion.text = "$appName v$version"
         activityAboutBinding.forkName.text = forkName
-        activityAboutBinding.originalProject.text = originalProjectLink
+        activityAboutBinding.originalProject.text = attributionText
         activityAboutBinding.thirdPartyLibraries.text = thirdPartyLibraries
         activityAboutBinding.licenseInfo.text = licenseText
     }
