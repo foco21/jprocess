@@ -32,6 +32,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.provider.MediaStore
 import android.util.Log
+import android.util.Range
 import android.util.Size
 import android.view.LayoutInflater
 import android.view.Surface
@@ -131,12 +132,21 @@ class CameraFragment : Fragment() {
     private lateinit var relativeOrientation: OrientationLiveData
 
     // State variables
-    private data class CameraInfo(val name: String, val cameraId: String, val supportedFormats: List<String>, val isLogicalCamera: Boolean)
+    private data class CameraInfo(
+        val name: String,
+        val cameraId: String,
+        val supportedFormats: List<String>,
+        val isLogicalCamera: Boolean
+    )
+
     private lateinit var availableLenses: List<CameraInfo>
     private var selectedLens: CameraInfo? = null
     private var selectedFormat: String? = null
     private var isWatermarkEnabled: Boolean = false
-    private var zoomRatio: Float = 1.0f
+    private var currentZoom: Float = 1.0f
+    private var maxZoom: Range<Float>? = null
+    private var cropRegion: Rect? = null
+    private var isLogicalCamera: Boolean = false
 
     private val prefs: SharedPreferences by lazy {
         requireContext().getSharedPreferences("unprocess_prefs", Context.MODE_PRIVATE)
@@ -166,6 +176,9 @@ class CameraFragment : Fragment() {
             startActivity(intent)
         }
 
+        fragmentCameraBinding.zoomButton1x.setOnClickListener { setZoom(1.0f) }
+        fragmentCameraBinding.zoomButton3x.setOnClickListener { setZoom(3.0f) }
+
         ViewCompat.setOnApplyWindowInsetsListener(fragmentCameraBinding.captureButton) { v, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.translationX = (-insets.right).toFloat()
@@ -175,7 +188,13 @@ class CameraFragment : Fragment() {
 
         fragmentCameraBinding.viewFinder.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceDestroyed(holder: SurfaceHolder) = Unit
-            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = Unit
+            override fun surfaceChanged(
+                holder: SurfaceHolder,
+                format: Int,
+                width: Int,
+                height: Int
+            ) = Unit
+
             override fun surfaceCreated(holder: SurfaceHolder) {
                 lifecycleScope.launch(Dispatchers.Main) {
                     setupSpinnersAndWatermark()
@@ -216,18 +235,19 @@ class CameraFragment : Fragment() {
         lensAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         fragmentCameraBinding.lensSpinner.adapter = lensAdapter
         fragmentCameraBinding.lensSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+            override fun onItemSelected(
+                parent: AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long
+            ) {
                 if (selectedLens?.cameraId != availableLenses[position].cameraId) {
                     selectedLens = availableLenses[position]
-
-                    if (selectedLens?.name?.contains("Telephoto") == true) {
-                        zoomRatio = characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM)!!
-                    }
-
                     selectedFormat = null // Force re-selection of format
                     updateFormatSpinner()
                 }
             }
+
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
@@ -239,7 +259,8 @@ class CameraFragment : Fragment() {
 
     private fun updateFormatSpinner() {
         selectedLens?.let { lens ->
-            val formatAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, lens.supportedFormats)
+            val formatAdapter =
+                ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, lens.supportedFormats)
             formatAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
             fragmentCameraBinding.formatSpinner.adapter = formatAdapter
 
@@ -249,12 +270,21 @@ class CameraFragment : Fragment() {
                 if (lens.supportedFormats.contains(preferredFormat)) {
                     selection = lens.supportedFormats.indexOf(preferredFormat)
                 } else {
-                    Toast.makeText(requireContext(), "Unsupported format🥲, defaulting to ${lens.supportedFormats[0]}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        requireContext(),
+                        "Unsupported format🥲, defaulting to ${lens.supportedFormats[0]}",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
 
             fragmentCameraBinding.formatSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                override fun onItemSelected(
+                    parent: AdapterView<*>?,
+                    view: View?,
+                    position: Int,
+                    id: Long
+                ) {
                     val newFormat = lens.supportedFormats[position]
                     if (selectedFormat != newFormat) {
                         selectedFormat = newFormat
@@ -266,6 +296,7 @@ class CameraFragment : Fragment() {
                         }
                     }
                 }
+
                 override fun onNothingSelected(parent: AdapterView<*>?) {}
             }
 
@@ -337,6 +368,21 @@ class CameraFragment : Fragment() {
         val cameraId = selectedLens!!.cameraId
         characteristics = cameraManager.getCameraCharacteristics(cameraId)
 
+        val physicalIds = characteristics.physicalCameraIds
+        isLogicalCamera = physicalIds != null && physicalIds.isNotEmpty()
+
+        val zoomRange = characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
+        val supportsLogicalZoom = isLogicalCamera && zoomRange != null
+
+        if (supportsLogicalZoom) {
+            fragmentCameraBinding.zoomControls.visibility = View.VISIBLE
+        } else {
+            fragmentCameraBinding.zoomControls.visibility = View.GONE
+        }
+
+        maxZoom = characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
+        cropRegion = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
+
         if (selectedLens!!.isLogicalCamera) {
             Toast.makeText(requireContext(), "Lens may switch dynamically on this device.", Toast.LENGTH_LONG).show()
         }
@@ -350,7 +396,11 @@ class CameraFragment : Fragment() {
             })
         }
 
-        val previewSize = getPreviewOutputSize(fragmentCameraBinding.viewFinder.display, characteristics, SurfaceHolder::class.java)
+        val previewSize = getPreviewOutputSize(
+            fragmentCameraBinding.viewFinder.display,
+            characteristics,
+            SurfaceHolder::class.java
+        )
         fragmentCameraBinding.viewFinder.setAspectRatio(previewSize.width, previewSize.height)
 
         try {
@@ -369,7 +419,8 @@ class CameraFragment : Fragment() {
             }
         }
 
-        val size = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!.getOutputSizes(pixelFormat).maxByOrNull { it.height * it.width }!!
+        val size = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
+            .getOutputSizes(pixelFormat).maxByOrNull { it.height * it.width }!!
         imageReader = ImageReader.newInstance(size.width, size.height, pixelFormat, IMAGE_BUFFER_SIZE)
 
         val targets = listOf(fragmentCameraBinding.viewFinder.holder.surface, imageReader.surface)
@@ -378,10 +429,6 @@ class CameraFragment : Fragment() {
 
         val captureRequest = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
             addTarget(fragmentCameraBinding.viewFinder.holder.surface)
-
-            if (selectedLens?.name?.contains("Telephoto") == true) {
-                set(CaptureRequest.SCALER_CROP_REGION, Rect(0, 0, size.width, size.height))
-            }
         }
 
         session.setRepeatingRequest(captureRequest.build(), null, cameraHandler)
@@ -407,6 +454,29 @@ class CameraFragment : Fragment() {
         }
     }
 
+    private fun setZoom(zoom: Float) {
+        if (!isLogicalCamera || !::session.isInitialized) return
+
+        val captureRequestBuilder = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+        captureRequestBuilder.addTarget(fragmentCameraBinding.viewFinder.holder.surface)
+
+        if (maxZoom != null) {
+            currentZoom = zoom.coerceIn(1.0f, maxZoom!!.upper)
+            captureRequestBuilder.set(CaptureRequest.CONTROL_ZOOM_RATIO, currentZoom)
+        } else {
+            val rect = cropRegion!!
+            val centerX = rect.width() / 2
+            val centerY = rect.height() / 2
+            val deltaX = (0.5f * rect.width() / zoom).toInt()
+            val deltaY = (0.5f * rect.height() / zoom).toInt()
+            val crop = Rect(centerX - deltaX, centerY - deltaY, centerX + deltaX, centerY + deltaY)
+            captureRequestBuilder.set(CaptureRequest.SCALER_CROP_REGION, crop)
+        }
+
+        session.setRepeatingRequest(captureRequestBuilder.build(), null, cameraHandler)
+    }
+
+
     @SuppressLint("MissingPermission")
     private suspend fun openCamera(
         manager: CameraManager,
@@ -420,6 +490,7 @@ class CameraFragment : Fragment() {
                     Log.w(TAG, "Camera $cameraId has been disconnected")
                     requireActivity().finish()
                 }
+
                 override fun onError(device: CameraDevice, error: Int) {
                     val msg = when (error) {
                         CameraDevice.StateCallback.ERROR_CAMERA_DEVICE -> "Fatal (device)"
@@ -467,11 +538,21 @@ class CameraFragment : Fragment() {
         val captureRequest = session.device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
             .apply { addTarget(imageReader.surface) }
         session.capture(captureRequest.build(), object : CameraCaptureSession.CaptureCallback() {
-            override fun onCaptureStarted(session: CameraCaptureSession, request: CaptureRequest, timestamp: Long, frameNumber: Long) {
+            override fun onCaptureStarted(
+                session: CameraCaptureSession,
+                request: CaptureRequest,
+                timestamp: Long,
+                frameNumber: Long
+            ) {
                 super.onCaptureStarted(session, request, timestamp, frameNumber)
                 fragmentCameraBinding.viewFinder.post(animationTask)
             }
-            override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+
+            override fun onCaptureCompleted(
+                session: CameraCaptureSession,
+                request: CaptureRequest,
+                result: TotalCaptureResult
+            ) {
                 super.onCaptureCompleted(session, request, result)
                 val resultTimestamp = result.get(CaptureResult.SENSOR_TIMESTAMP)
                 val exc = TimeoutException("Image dequeuing took too long")
@@ -483,23 +564,33 @@ class CameraFragment : Fragment() {
                         val image = imageQueue.take()
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
                             image.format != ImageFormat.DEPTH_JPEG &&
-                            image.timestamp != resultTimestamp) continue
+                            image.timestamp != resultTimestamp
+                        ) continue
 
                         imageReaderHandler.removeCallbacks(timeoutRunnable)
                         imageReader.setOnImageAvailableListener(null, null)
-                        while (imageQueue.size > 0) { imageQueue.take().close() }
+                        while (imageQueue.size > 0) {
+                            imageQueue.take().close()
+                        }
 
                         val rotation = relativeOrientation.value ?: 0
                         val mirrored = characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
                         val exifOrientation = computeExifOrientation(rotation, mirrored)
 
-                        cont.resume(CombinedCaptureResult(image, result, exifOrientation, imageReader.imageFormat))
+                        cont.resume(
+                            CombinedCaptureResult(
+                                image,
+                                result,
+                                exifOrientation,
+                                imageReader.imageFormat
+                            )
+                        )
                     }
                 }
             }
         }, cameraHandler)
     }
-    
+
     private fun addWatermark(bitmap: Bitmap): Bitmap {
         val newBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(newBitmap)
@@ -546,13 +637,16 @@ class CameraFragment : Fragment() {
                         resolver.openOutputStream(uri)?.use { stream -> dngCreator.writeImage(stream, result.image) }
                         cont.resume(File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera"), filename))
                     } else {
-                        val file = File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera").apply { mkdirs() }, filename)
+                        val file = File(
+                            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera").apply { mkdirs() },
+                            filename
+                        )
                         FileOutputStream(file).use { outputStream -> dngCreator.writeImage(outputStream, result.image) }
                         cont.resume(file)
                     }
                     return@suspendCoroutine
                 } else {
-                     val tempDngFile = File(requireContext().cacheDir, "temp.dng")
+                    val tempDngFile = File(requireContext().cacheDir, "temp.dng")
                     FileOutputStream(tempDngFile).use { outputStream ->
                         dngCreator.writeImage(outputStream, result.image)
                     }
@@ -570,7 +664,7 @@ class CameraFragment : Fragment() {
         }
 
         if (bitmap != null) {
-             // Apply rotation if needed (for PNG)
+            // Apply rotation if needed (for PNG)
             val rotationDegrees = when (orientation) {
                 ExifInterface.ORIENTATION_ROTATE_90 -> 90
                 ExifInterface.ORIENTATION_ROTATE_180 -> 180
@@ -578,7 +672,7 @@ class CameraFragment : Fragment() {
                 else -> 0
             }
             if (rotationDegrees != 0) {
-                 bitmap = rotateBitmap(bitmap, rotationDegrees)
+                bitmap = rotateBitmap(bitmap, rotationDegrees)
             }
 
             // Apply watermark if enabled
@@ -592,7 +686,7 @@ class CameraFragment : Fragment() {
                 else -> throw RuntimeException("Unsupported format for bitmap saving")
             }
             val filename = "IMG_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.$extension"
-            
+
             val outputStream = ByteArrayOutputStream()
             bitmap.compress(format, 100, outputStream)
             val finalBytes = outputStream.toByteArray()
@@ -607,9 +701,9 @@ class CameraFragment : Fragment() {
                 val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
                     ?: throw IOException("Failed to create MediaStore entry")
                 resolver.openOutputStream(uri)?.use { it.write(finalBytes) }
-                
+
                 if (outputFormat == "JPEG") {
-                     resolver.openFileDescriptor(uri, "rw")?.use { pfd ->
+                    resolver.openFileDescriptor(uri, "rw")?.use { pfd ->
                         ExifInterface(pfd.fileDescriptor).apply {
                             setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString())
                             saveAttributes()
@@ -619,9 +713,12 @@ class CameraFragment : Fragment() {
 
                 cont.resume(File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera"), filename))
             } else {
-                val file = File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera").apply { mkdirs() }, filename)
+                val file = File(
+                    File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera").apply { mkdirs() },
+                    filename
+                )
                 FileOutputStream(file).use { it.write(finalBytes) }
-                 if (outputFormat == "JPEG") {
+                if (outputFormat == "JPEG") {
                     ExifInterface(file.absolutePath).apply {
                         setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString())
                         saveAttributes()
@@ -637,7 +734,9 @@ class CameraFragment : Fragment() {
     override fun onStop() {
         super.onStop()
         try {
-            if (::camera.isInitialized) { camera.close() }
+            if (::camera.isInitialized) {
+                camera.close()
+            }
         } catch (exc: Throwable) {
             Log.e(TAG, "Error closing camera", exc)
         }

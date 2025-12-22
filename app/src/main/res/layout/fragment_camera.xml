@@ -70,6 +70,28 @@
 
     </LinearLayout>
 
+    <LinearLayout
+        android:id="@+id/zoom_controls"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="120dp">
+
+        <Button
+            android:id="@+id/zoom_button_1x"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="1x" />
+
+        <Button
+            android:id="@+id/zoom_button_3x"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="3x" />
+
+    </LinearLayout>
+
     <ImageButton
         android:id="@+id/gallery_button"
         android:layout_width="72dp"
