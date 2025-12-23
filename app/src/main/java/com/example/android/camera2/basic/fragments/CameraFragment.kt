@@ -484,15 +484,26 @@ class CameraFragment : Fragment() {
 
         val zoomRange = characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
         if (zoomRange != null) {
-            currentZoom = zoom.coerceIn(zoomRange.lower, zoomRange.upper)
+            val maxZoom = if (selectedFormat == "JPEG") {
+                zoomRange.upper
+            } else {
+                telephotoZoom
+            }
+            currentZoom = zoom.coerceIn(zoomRange.lower, maxZoom)
             captureRequestBuilder.set(CaptureRequest.CONTROL_ZOOM_RATIO, currentZoom)
         } else {
             // Fallback for devices that don't support CONTROL_ZOOM_RATIO
+            val maxZoom = if (selectedFormat == "JPEG") {
+                (characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM) ?: 1.0f)
+            } else {
+                telephotoZoom
+            }
             val rect = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)!!
             val centerX = rect.width() / 2
             val centerY = rect.height() / 2
-            val deltaX = (0.5f * rect.width() / zoom).toInt()
-            val deltaY = (0.5f * rect.height() / zoom).toInt()
+            currentZoom = zoom.coerceIn(1f, maxZoom)
+            val deltaX = (0.5f * rect.width() / currentZoom).toInt()
+            val deltaY = (0.5f * rect.height() / currentZoom).toInt()
             val crop = Rect(centerX - deltaX, centerY - deltaY, centerX + deltaX, centerY + deltaY)
             captureRequestBuilder.set(CaptureRequest.SCALER_CROP_REGION, crop)
         }
@@ -560,7 +571,21 @@ class CameraFragment : Fragment() {
         }, imageReaderHandler)
 
         val captureRequest = session.device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
-            .apply { addTarget(imageReader.surface) }
+            .apply {
+                addTarget(imageReader.surface)
+                val zoomRange = characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
+                if (zoomRange != null) {
+                    set(CaptureRequest.CONTROL_ZOOM_RATIO, currentZoom)
+                } else {
+                    val rect = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)!!
+                    val centerX = rect.width() / 2
+                    val centerY = rect.height() / 2
+                    val deltaX = (0.5f * rect.width() / currentZoom).toInt()
+                    val deltaY = (0.5f * rect.height() / currentZoom).toInt()
+                    val crop = Rect(centerX - deltaX, centerY - deltaY, centerX + deltaX, centerY + deltaY)
+                    set(CaptureRequest.SCALER_CROP_REGION, crop)
+                }
+            }
         session.capture(captureRequest.build(), object : CameraCaptureSession.CaptureCallback() {
             override fun onCaptureStarted(
                 session: CameraCaptureSession,

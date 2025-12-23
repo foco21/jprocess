@@ -58,7 +58,7 @@ class CameraActivity : AppCompatActivity() {
                     .setMessage(
                         "This is a beta build. You may encounter the following issues:\n\n" +
                                 "- Pixel 9a may crash\n" +
-                                "- Logical camera zoom varies\n" +
+                                "- Logical camera might use digital and not physical\n" +
                                 "- Telephoto may not appear\n" +
                                 "- UI is still in progress"
                     )
