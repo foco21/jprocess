@@ -42,6 +42,7 @@ import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -269,11 +270,11 @@ class CameraFragment : Fragment() {
                 if (lens.supportedFormats.contains(preferredFormat)) {
                     selection = lens.supportedFormats.indexOf(preferredFormat)
                 } else {
-                    Toast.makeText(
-                        requireContext(),
-                        "Unsupported format🥲, defaulting to ${lens.supportedFormats[0]}",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    AlertDialog.Builder(requireContext())
+                        .setTitle("Unsupported Format")
+                        .setMessage("Previously used format is not supported on this lens, defaulting to ${lens.supportedFormats[0]}")
+                        .setPositiveButton("OK", null)
+                        .show()
                 }
             }
 
@@ -370,7 +371,12 @@ class CameraFragment : Fragment() {
 
         // Determine the telephoto zoom factor for logical cameras
         if (selectedLens!!.isLogicalCamera) {
-            Toast.makeText(requireContext(), "Lens may switch dynamically on this device.", Toast.LENGTH_LONG).show()
+            AlertDialog.Builder(requireContext())
+                .setTitle("Logical Camera Selected")
+                .setMessage("The lens may switch dynamically on this device, which may cause variations in exposure and focus.")
+                .setPositiveButton("OK", null)
+                .show()
+
             var wideAngleFocalLength = -1f
             var telephotoFocalLength = -1f
 
