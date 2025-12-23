@@ -16,8 +16,11 @@
 
 package com.reilandeubank.unprocess
 
+import android.content.Context
+import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.View
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.reilandeubank.unprocess.databinding.ActivityCameraBinding
 
@@ -29,6 +32,8 @@ class CameraActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         activityCameraBinding = ActivityCameraBinding.inflate(layoutInflater)
         setContentView(activityCameraBinding.root)
+
+        showBetaNotice()
     }
 
     override fun onResume() {
@@ -38,6 +43,33 @@ class CameraActivity : AppCompatActivity() {
         activityCameraBinding.fragmentContainer.postDelayed({
             activityCameraBinding.fragmentContainer.systemUiVisibility = FLAGS_FULLSCREEN
         }, IMMERSIVE_FLAG_TIMEOUT)
+    }
+
+    private fun showBetaNotice() {
+        // Only show on the beta build
+        if (BuildConfig.BETA) {
+            val prefs = getSharedPreferences("unprocess_prefs", Context.MODE_PRIVATE)
+            val hasSeenBetaNotice = prefs.getBoolean("hasSeenBetaNotice", false)
+
+            // Show the notice only once per user
+            if (!hasSeenBetaNotice) {
+                AlertDialog.Builder(this)
+                    .setTitle("Beta Notice")
+                    .setMessage(
+                        "This is a beta build. You may encounter the following issues:\n\n" +
+                                "- Pixel 9a may crash\n" +
+                                "- Logical camera zoom varies\n" +
+                                "- Telephoto may not appear\n" +
+                                "- UI is still in progress"
+                    )
+                    .setPositiveButton("Continue") { dialog, _ ->
+                        // Mark the notice as seen so it never shows again
+                        prefs.edit().putBoolean("hasSeenBetaNotice", true).apply()
+                        dialog.dismiss()
+                    }
+                    .show()
+            }
+        }
     }
 
     companion object {
