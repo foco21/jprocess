@@ -270,11 +270,7 @@ class CameraFragment : Fragment() {
                 if (lens.supportedFormats.contains(preferredFormat)) {
                     selection = lens.supportedFormats.indexOf(preferredFormat)
                 } else {
-                    AlertDialog.Builder(requireContext())
-                        .setTitle("Unsupported Format")
-                        .setMessage("Previously used format is not supported on this lens, defaulting to ${lens.supportedFormats[0]}")
-                        .setPositiveButton("OK", null)
-                        .show()
+                    Toast.makeText(requireContext(), "Previously used format is not supported on this lens, defaulting to ${lens.supportedFormats[0]}", Toast.LENGTH_LONG).show()
                 }
             }
 
