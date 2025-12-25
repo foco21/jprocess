@@ -371,11 +371,7 @@ class CameraFragment : Fragment() {
 
         // Determine the telephoto zoom factor for logical cameras
         if (selectedLens!!.isLogicalCamera) {
-            AlertDialog.Builder(requireContext())
-                .setTitle("Logical Camera Selected")
-                .setMessage("The lens may switch dynamically on this device, which may cause variations in exposure and focus.")
-                .setPositiveButton("OK", null)
-                .show()
+            Toast.makeText(requireContext(), "Logical Camera Selected: The lens may switch dynamically on this device, which may cause variations in exposure and focus.", Toast.LENGTH_LONG).show()
 
             var wideAngleFocalLength = -1f
             var telephotoFocalLength = -1f
