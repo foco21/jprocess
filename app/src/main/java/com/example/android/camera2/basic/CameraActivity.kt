@@ -33,7 +33,7 @@ class CameraActivity : AppCompatActivity() {
         activityCameraBinding = ActivityCameraBinding.inflate(layoutInflater)
         setContentView(activityCameraBinding.root)
 
-        showBetaNotice()
+        // showBetaNotice()
     }
 
     override fun onResume() {
