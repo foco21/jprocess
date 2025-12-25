@@ -20,7 +20,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.graphics.* 
+import android.graphics.*
 import android.hardware.camera2.*
 import android.media.Image
 import android.media.ImageReader
@@ -42,6 +42,7 @@ import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -75,6 +76,7 @@ import java.util.concurrent.TimeoutException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
+import kotlin.math.roundToInt
 
 class CameraFragment : Fragment() {
 
@@ -136,7 +138,8 @@ class CameraFragment : Fragment() {
         val name: String,
         val cameraId: String,
         val supportedFormats: List<String>,
-        val isLogicalCamera: Boolean
+        val isLogicalCamera: Boolean,
+        val physicalCameraIds: Set<String> = emptySet()
     )
 
     private lateinit var availableLenses: List<CameraInfo>
@@ -144,9 +147,7 @@ class CameraFragment : Fragment() {
     private var selectedFormat: String? = null
     private var isWatermarkEnabled: Boolean = false
     private var currentZoom: Float = 1.0f
-    private var maxZoom: Range<Float>? = null
-    private var cropRegion: Rect? = null
-    private var isLogicalCamera: Boolean = false
+    private var telephotoZoom: Float = 1.0f
 
     private val prefs: SharedPreferences by lazy {
         requireContext().getSharedPreferences("unprocess_prefs", Context.MODE_PRIVATE)
@@ -177,7 +178,6 @@ class CameraFragment : Fragment() {
         }
 
         fragmentCameraBinding.zoomButton1x.setOnClickListener { setZoom(1.0f) }
-        fragmentCameraBinding.zoomButton3x.setOnClickListener { setZoom(3.0f) }
 
         ViewCompat.setOnApplyWindowInsetsListener(fragmentCameraBinding.captureButton) { v, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -270,17 +270,13 @@ class CameraFragment : Fragment() {
                 if (lens.supportedFormats.contains(preferredFormat)) {
                     selection = lens.supportedFormats.indexOf(preferredFormat)
                 } else {
-                    Toast.makeText(
-                        requireContext(),
-                        "Unsupported format🥲, defaulting to ${lens.supportedFormats[0]}",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    Toast.makeText(requireContext(), "Previously used format is not supported on this lens, defaulting to ${lens.supportedFormats[0]}", Toast.LENGTH_LONG).show()
                 }
             }
 
             fragmentCameraBinding.formatSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(
-                    parent: AdapterView<*>?,
+                    parent: AdapterView<*>?, 
                     view: View?,
                     position: Int,
                     id: Long
@@ -344,11 +340,12 @@ class CameraFragment : Fragment() {
                 }
 
                 val isLogical = capabilities.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA)
+                val physicalCameraIds = if (isLogical) characteristics.physicalCameraIds else emptySet()
                 if (isLogical) {
                     lensName += " [logical]"
                 }
 
-                cameraInfoList.add(CameraInfo(lensName, id, supportedFormats.distinct(), isLogical))
+                cameraInfoList.add(CameraInfo(lensName, id, supportedFormats.distinct(), isLogical, physicalCameraIds))
             }
         }
 
@@ -368,23 +365,40 @@ class CameraFragment : Fragment() {
         val cameraId = selectedLens!!.cameraId
         characteristics = cameraManager.getCameraCharacteristics(cameraId)
 
-        val physicalIds = characteristics.physicalCameraIds
-        isLogicalCamera = physicalIds != null && physicalIds.isNotEmpty()
+        // Determine the telephoto zoom factor for logical cameras
+        if (selectedLens!!.isLogicalCamera) {
+            Toast.makeText(requireContext(), "Logical Camera Selected: The lens may switch dynamically on this device, which may cause variations in exposure and focus.", Toast.LENGTH_LONG).show()
 
-        val zoomRange = characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
-        val supportsLogicalZoom = isLogicalCamera && zoomRange != null
+            var wideAngleFocalLength = -1f
+            var telephotoFocalLength = -1f
 
-        if (supportsLogicalZoom) {
-            fragmentCameraBinding.zoomControls.visibility = View.VISIBLE
+            for (physicalId in selectedLens!!.physicalCameraIds) {
+                val physicalChars = cameraManager.getCameraCharacteristics(physicalId)
+                val focalLengths = physicalChars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                if (focalLengths != null && focalLengths.isNotEmpty()) {
+                    val minFocalLength = focalLengths.minOrNull()!!
+                    if (minFocalLength < 6.0f) { // Wide-angle lens
+                        if (wideAngleFocalLength == -1f || minFocalLength < wideAngleFocalLength) {
+                            wideAngleFocalLength = minFocalLength
+                        }
+                    } else { // Telephoto lens
+                        if (telephotoFocalLength == -1f || minFocalLength > telephotoFocalLength) {
+                            telephotoFocalLength = minFocalLength
+                        }
+                    }
+                }
+            }
+
+            if (wideAngleFocalLength != -1f && telephotoFocalLength != -1f) {
+                telephotoZoom = (telephotoFocalLength / wideAngleFocalLength)
+                fragmentCameraBinding.zoomControls.visibility = View.VISIBLE
+                fragmentCameraBinding.zoomButton3x.text = "${telephotoZoom.roundToInt()}x"
+                fragmentCameraBinding.zoomButton3x.setOnClickListener { setZoom(telephotoZoom) }
+            } else {
+                fragmentCameraBinding.zoomControls.visibility = View.GONE
+            }
         } else {
             fragmentCameraBinding.zoomControls.visibility = View.GONE
-        }
-
-        maxZoom = characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
-        cropRegion = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
-
-        if (selectedLens!!.isLogicalCamera) {
-            Toast.makeText(requireContext(), "Lens may switch dynamically on this device.", Toast.LENGTH_LONG).show()
         }
 
         if (::relativeOrientation.isInitialized) {
@@ -455,20 +469,33 @@ class CameraFragment : Fragment() {
     }
 
     private fun setZoom(zoom: Float) {
-        if (!isLogicalCamera || !::session.isInitialized) return
+        if (!selectedLens!!.isLogicalCamera || !::session.isInitialized) return
 
         val captureRequestBuilder = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
         captureRequestBuilder.addTarget(fragmentCameraBinding.viewFinder.holder.surface)
 
-        if (maxZoom != null) {
-            currentZoom = zoom.coerceIn(1.0f, maxZoom!!.upper)
+        val zoomRange = characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
+        if (zoomRange != null) {
+            val maxZoom = if (selectedFormat == "JPEG") {
+                zoomRange.upper
+            } else {
+                telephotoZoom
+            }
+            currentZoom = zoom.coerceIn(zoomRange.lower, maxZoom)
             captureRequestBuilder.set(CaptureRequest.CONTROL_ZOOM_RATIO, currentZoom)
         } else {
-            val rect = cropRegion!!
+            // Fallback for devices that don't support CONTROL_ZOOM_RATIO
+            val maxZoom = if (selectedFormat == "JPEG") {
+                (characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM) ?: 1.0f)
+            } else {
+                telephotoZoom
+            }
+            val rect = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)!!
             val centerX = rect.width() / 2
             val centerY = rect.height() / 2
-            val deltaX = (0.5f * rect.width() / zoom).toInt()
-            val deltaY = (0.5f * rect.height() / zoom).toInt()
+            currentZoom = zoom.coerceIn(1f, maxZoom)
+            val deltaX = (0.5f * rect.width() / currentZoom).toInt()
+            val deltaY = (0.5f * rect.height() / currentZoom).toInt()
             val crop = Rect(centerX - deltaX, centerY - deltaY, centerX + deltaX, centerY + deltaY)
             captureRequestBuilder.set(CaptureRequest.SCALER_CROP_REGION, crop)
         }
@@ -536,7 +563,21 @@ class CameraFragment : Fragment() {
         }, imageReaderHandler)
 
         val captureRequest = session.device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
-            .apply { addTarget(imageReader.surface) }
+            .apply {
+                addTarget(imageReader.surface)
+                val zoomRange = characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
+                if (zoomRange != null) {
+                    set(CaptureRequest.CONTROL_ZOOM_RATIO, currentZoom)
+                } else {
+                    val rect = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)!!
+                    val centerX = rect.width() / 2
+                    val centerY = rect.height() / 2
+                    val deltaX = (0.5f * rect.width() / currentZoom).toInt()
+                    val deltaY = (0.5f * rect.height() / currentZoom).toInt()
+                    val crop = Rect(centerX - deltaX, centerY - deltaY, centerX + deltaX, centerY + deltaY)
+                    set(CaptureRequest.SCALER_CROP_REGION, crop)
+                }
+            }
         session.capture(captureRequest.build(), object : CameraCaptureSession.CaptureCallback() {
             override fun onCaptureStarted(
                 session: CameraCaptureSession,
