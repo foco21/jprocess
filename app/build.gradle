@@ -45,11 +45,16 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.debug
+            buildConfigField "boolean", "BETA", "false"
+        }
+        debug {
+            buildConfigField "boolean", "BETA", "false"
         }
     }
 
     buildFeatures {
         viewBinding true
+        buildConfig true
     }
 
     lint {
