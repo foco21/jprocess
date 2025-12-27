@@ -236,7 +236,7 @@ class CameraFragment : Fragment() {
         fragmentCameraBinding.lensSpinner.adapter = lensAdapter
         fragmentCameraBinding.lensSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(
-                parent: AdapterView<*>?,
+                parent: AdapterView<*>,
                 view: View?,
                 position: Int,
                 id: Long
@@ -276,7 +276,7 @@ class CameraFragment : Fragment() {
 
             fragmentCameraBinding.formatSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(
-                    parent: AdapterView<*>?, 
+                    parent: AdapterView<*>,
                     view: View?,
                     position: Int,
                     id: Long
@@ -450,20 +450,20 @@ class CameraFragment : Fragment() {
         fragmentCameraBinding.captureButton.setOnClickListener {
             it.isEnabled = false
             lifecycleScope.launch(Dispatchers.IO) {
-                takePhoto().use { result ->
-                    Log.d(TAG, "Result received: $result")
-                    val output = saveResult(result)
-                    Log.d(TAG, "Image saved: ${output.absolutePath}")
-                    lifecycleScope.launch(Dispatchers.Main) {
-                        loadThumbnail()
-                        navController.navigate(
-                            CameraFragmentDirections.actionCameraToJpegViewer(output.absolutePath)
-                                .setOrientation(result.orientation)
-                                .setDepth(result.format == ImageFormat.DEPTH_JPEG)
-                        )
+                try {
+                    takePhoto().use { result ->
+                        Log.d(TAG, "Result received: $result")
+                        val output = saveResult(result)
+                        Log.d(TAG, "Image saved: ${output.absolutePath}")
+                        lifecycleScope.launch(Dispatchers.Main) {
+                            loadThumbnail()
+                        }
                     }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error taking photo", e)
+                } finally {
+                    it.post { it.isEnabled = true }
                 }
-                it.post { it.isEnabled = true }
             }
         }
     }
@@ -653,11 +653,13 @@ class CameraFragment : Fragment() {
     }
 
     private suspend fun saveResult(result: CombinedCaptureResult): File = suspendCoroutine { cont ->
-        val outputFormat = selectedFormat ?: return@suspendCoroutine
+        val outputFormat = selectedFormat ?: run {
+            cont.resumeWithException(RuntimeException("No output format selected"))
+            return@suspendCoroutine
+        }
         val orientation = result.orientation
 
         var bitmap: Bitmap? = null
-        var bytes: ByteArray? = null
 
         // Get the image data
         when (result.format) {
@@ -697,7 +699,7 @@ class CameraFragment : Fragment() {
             }
             ImageFormat.JPEG -> {
                 val buffer = result.image.planes[0].buffer
-                bytes = ByteArray(buffer.remaining())
+                val bytes = ByteArray(buffer.remaining())
                 buffer.get(bytes)
                 bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
             }
@@ -705,7 +707,6 @@ class CameraFragment : Fragment() {
         }
 
         if (bitmap != null) {
-            // Apply rotation if needed (for PNG)
             val rotationDegrees = when (orientation) {
                 ExifInterface.ORIENTATION_ROTATE_90 -> 90
                 ExifInterface.ORIENTATION_ROTATE_180 -> 180
@@ -746,7 +747,8 @@ class CameraFragment : Fragment() {
                 if (outputFormat == "JPEG") {
                     resolver.openFileDescriptor(uri, "rw")?.use { pfd ->
                         ExifInterface(pfd.fileDescriptor).apply {
-                            setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString())
+                            // We've already rotated the bitmap, so we can clear the orientation tag
+                            setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
                             saveAttributes()
                         }
                     }
@@ -761,7 +763,8 @@ class CameraFragment : Fragment() {
                 FileOutputStream(file).use { it.write(finalBytes) }
                 if (outputFormat == "JPEG") {
                     ExifInterface(file.absolutePath).apply {
-                        setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString())
+                        // We've already rotated the bitmap, so we can clear the orientation tag
+                        setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
                         saveAttributes()
                     }
                 }

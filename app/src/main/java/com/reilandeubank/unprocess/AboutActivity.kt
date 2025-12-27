@@ -13,7 +13,7 @@ class AboutActivity : AppCompatActivity() {
         activityAboutBinding = ActivityAboutBinding.inflate(layoutInflater)
         setContentView(activityAboutBinding.root)
 
-        val version = "0.1.0"
+        val version = "0.1.1 beta"
         val appName = "junproccess"
         val forkName = "juneunprocess"
         val originalProjectLink = "https://github.com/reilandeubank/unprocess"

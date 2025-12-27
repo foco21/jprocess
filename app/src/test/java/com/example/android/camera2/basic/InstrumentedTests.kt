@@ -18,10 +18,9 @@ package com.reilandeubank.unprocess
 
 import android.Manifest
 import android.content.Context
-import android.os.Build
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.rule.ActivityTestRule
 import androidx.test.rule.GrantPermissionRule
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -36,8 +35,8 @@ class MainInstrumentedTest {
     val permissionRule = GrantPermissionRule.grant(Manifest.permission.CAMERA)
 
     @get:Rule
-    val activityRule: ActivityTestRule<CameraActivity> =
-            ActivityTestRule(CameraActivity::class.java)
+    val activityRule: ActivityScenarioRule<CameraActivity> =
+        ActivityScenarioRule(CameraActivity::class.java)
 
     @Test
     fun useAppContext() {

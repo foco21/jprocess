@@ -45,10 +45,10 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.debug
-            buildConfigField "boolean", "BETA", "false"
+            buildConfigField "boolean", "BETA", "true"
         }
         debug {
-            buildConfigField "boolean", "BETA", "false"
+            buildConfigField "boolean", "BETA", "true"
         }
     }
 
