@@ -17,6 +17,7 @@
 package com.reilandeubank.unprocess
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AlertDialog
@@ -58,6 +59,7 @@ class CameraActivity : AppCompatActivity() {
                         "This is a beta build. You may encounter the following issues:\n\n" +
                                 "- Pixel 9a may crash\n" +
                                 "- Logical camera might zoom in and out\n" +
+                                "- photos might be rotated sideways\n" +
                                 "- UI is still in progress"
                     )
                     .setPositiveButton("Continue") { dialog, _ ->
