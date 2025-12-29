@@ -9,11 +9,12 @@ modern devices' excessive computational photography.
 
 Introduction
 ------------
+This is a legacy version of junporcess specifically build for android 9 (Pie) to android 5 (Lollipop)
+Raw,jpeg, png ✅ supported.
+Physical camera selector (wide ,telephoto and ultrawide) ✅
+water mark with device/shot info is ✅
 
-unprocess uses the [Camera2 API][1] to capture raw sensor data from the camera before being
-converted to a human-viewable file format.
-
-The app now allows users to select individual physical cameras (wide, telephoto, ultra-wide, etc.) from a list and switch between them directly on the camera screen. Users can choose between RAW (.dng), JPEG (.jpg), or PNG (.png) for the final, saved file, and can optionally enable a watermark with device and shot information. This ensures every photo is purely optical and unprocessed.
+this branch focuses more on stability for older devices so updates will be slower than the main branch.
 
 [1]: https://developer.android.com/reference/android/hardware/camera2/package-summary.html
 
