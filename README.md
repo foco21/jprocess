@@ -1,4 +1,4 @@
-![logo-sm](https://github.com/foco21/jprocess/blob/main/uncompress_J.png)
+![logo-sm](https://github.com/foco21/jprocess/blob/Legacy/unprocess%20jL%20logo%202.png)
 
 junprocess
 ===========================
