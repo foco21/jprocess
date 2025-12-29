@@ -21,12 +21,12 @@ apply plugin: "androidx.navigation.safeargs"
 
 android {
     namespace = "com.reilandeubank.unprocess"
-    compileSdkVersion 34
+    compileSdkVersion 28
     defaultConfig {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         applicationId "com.reilandeubank.unprocess"
         minSdkVersion 21
-        targetSdkVersion 34
+        targetSdkVersion 28
         versionCode 1
         versionName "0.0.9"
     }
