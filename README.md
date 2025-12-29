@@ -37,10 +37,5 @@ This sample uses the Gradle build system. To build this project, use the
 
 Support
 -------
-
-Patches are encouraged, and may be submitted by forking this project and
-submitting a pull request through GitHub.
-
-This is my first foray into Android app development, so the project may start a little rough
-around the edges. If there is community interest, I will do my best to keep it going and
-take in any improvements that are able to be contributed. 
+This legacy version will be a lil behind as i backport a bunch of features from the main branch to this one but i will try my best to do it.
+If you have any issues with your phone and it is running android 9 to android 5 please leave issues on this branch and not the main branch.
