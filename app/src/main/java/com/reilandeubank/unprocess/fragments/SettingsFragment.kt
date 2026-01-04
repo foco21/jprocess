@@ -1,20 +1,41 @@
-package com.reilandeubank.unprocess
+package com.reilandeubank.unprocess.fragments
 
-import android.content.Intent
+import android.content.Context
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
-import com.reilandeubank.unprocess.databinding.ActivityAboutBinding
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
+import com.reilandeubank.unprocess.databinding.FragmentSettingsBinding
 
-class AboutActivity : AppCompatActivity() {
+class SettingsFragment : Fragment() {
 
-    private lateinit var activityAboutBinding: ActivityAboutBinding
+    private var _binding: FragmentSettingsBinding? = null
+    private val binding get() = _binding!!
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        activityAboutBinding = ActivityAboutBinding.inflate(layoutInflater)
-        setContentView(activityAboutBinding.root)
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        _binding = FragmentSettingsBinding.inflate(inflater, container, false)
+        return binding.root
+    }
 
-        val version = "0.1.1 morning showers"
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        binding.backButton.setOnClickListener {
+            findNavController().popBackStack()
+        }
+
+        val prefs = requireContext().getSharedPreferences("unprocess_prefs", Context.MODE_PRIVATE)
+
+        // About section
+        val version = "0.1.1 beta"
         val appName = "junproccess"
         val forkName = "juneunprocess"
         val originalProjectLink = "https://github.com/reilandeubank/unprocess"
@@ -222,17 +243,39 @@ class AboutActivity : AppCompatActivity() {
             END OF TERMS AND CONDITIONS
         """.trimIndent()
 
+        binding.appNameAndVersion.text = "$appName v$version"
+        binding.forkName.text = forkName
+        binding.originalProject.text = attributionText
+        binding.thirdPartyLibraries.text = thirdPartyLibraries
+        binding.licenseInfo.text = licenseText
 
-        activityAboutBinding.appNameAndVersion.text = "$appName v$version"
-        activityAboutBinding.forkName.text = forkName
-        activityAboutBinding.originalProject.text = attributionText
-        activityAboutBinding.thirdPartyLibraries.text = thirdPartyLibraries
-        activityAboutBinding.licenseInfo.text = licenseText
-
-        activityAboutBinding.galleryButton.setOnClickListener {
-            val intent = Intent(Intent.ACTION_VIEW)
-            intent.type = "image/*"
-            startActivity(intent)
+        // Watermark switch
+        binding.watermarkSwitch.isChecked = prefs.getBoolean("watermark_enabled", false)
+        binding.watermarkSwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("watermark_enabled", isChecked).apply()
         }
+
+        // Format spinner
+        val formats = arrayOf("JPEG", "RAW", "PNG")
+        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, formats)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.formatSpinner.adapter = adapter
+
+        val preferredFormat = prefs.getString("preferred_format", "JPEG")
+        val selection = formats.indexOf(preferredFormat)
+        binding.formatSpinner.setSelection(selection)
+
+        binding.formatSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
+                prefs.edit().putString("preferred_format", formats[position]).apply()
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 }
