@@ -38,6 +38,25 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
+    <FrameLayout
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_marginStart="24dp"
+        android:layout_marginBottom="48dp"
+        android:background="@drawable/scrim_circle_background"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <ImageButton
+            android:id="@+id/gallery_button"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_photo"
+            android:contentDescription="Gallery" />
+
+    </FrameLayout>
+
     <HorizontalScrollView
         android:id="@+id/lens_scroll_view"
         android:layout_width="match_parent"

@@ -18,6 +18,7 @@ package com.reilandeubank.unprocess.fragments
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.graphics.*
 import android.hardware.camera2.*
 import android.media.Image
@@ -29,12 +30,12 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.provider.MediaStore
 import android.util.Log
-import android.util.Size
 import android.view.LayoutInflater
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.graphics.drawable.toDrawable
 import androidx.exifinterface.media.ExifInterface
@@ -96,17 +97,6 @@ class CameraFragment : Fragment() {
 
     /** [Handler] corresponding to [cameraThread] */
     private val cameraHandler = Handler(cameraThread.looper)
-
-    /** Performs recording animation of flashing screen */
-    private val animationTask: Runnable by lazy {
-        Runnable {
-            _fragmentCameraBinding?.overlay?.let{
-                // Flash white animation
-                it.background = Color.argb(150, 255, 255, 255).toDrawable()
-                it.postDelayed({ it.background = null }, 50)
-            }
-        }
-    }
 
     /** [HandlerThread] where all buffer reading operations run */
     private val imageReaderThread = HandlerThread("imageReaderThread").apply { start() }
@@ -217,6 +207,11 @@ class CameraFragment : Fragment() {
 
         fragmentCameraBinding.settingsButton.setOnClickListener {
             navController.navigate(R.id.action_camera_to_settings)
+        }
+
+        fragmentCameraBinding.galleryButton?.setOnClickListener {
+            val intent = Intent(Intent.ACTION_VIEW, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+            startActivity(intent)
         }
 
         fragmentCameraBinding.zoomToggleGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
@@ -355,7 +350,7 @@ class CameraFragment : Fragment() {
                 val physicalChars = cameraManager.getCameraCharacteristics(physicalId)
                 val focalLengths = physicalChars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
                 if (focalLengths != null && focalLengths.isNotEmpty()) {
-                    val minFocalLength = focalLengths.minOrNull()!!
+                    val minFocalLength = focalLengths.minByOrNull { it }!!
                     if (minFocalLength < 6.0f) { // Wide-angle lens
                         if (wideAngleFocalLength == -1f || minFocalLength < wideAngleFocalLength) {
                             wideAngleFocalLength = minFocalLength
@@ -432,15 +427,9 @@ class CameraFragment : Fragment() {
                 try {
                     takePhoto().use { result ->
                         Log.d(TAG, "Result received: $result")
-                        val photoFile = saveResult(result)
+                        saveResult(result)
                         requireActivity().runOnUiThread {
-                            navController.navigate(
-                                CameraFragmentDirections.actionCameraToImageViewer(
-                                    photoFile.absolutePath,
-                                    result.orientation,
-                                    result.format == ImageFormat.RAW_SENSOR
-                                )
-                            )
+                            Toast.makeText(requireContext(), "Photo saved", Toast.LENGTH_SHORT).show()
                         }
                     }
                 } catch (e: Exception) {
@@ -560,7 +549,6 @@ class CameraFragment : Fragment() {
                 frameNumber: Long
             ) {
                 super.onCaptureStarted(session, request, timestamp, frameNumber)
-                fragmentCameraBinding.viewFinder.post(animationTask)
             }
 
             override fun onCaptureCompleted(
@@ -631,7 +619,7 @@ class CameraFragment : Fragment() {
             cont.resumeWithException(RuntimeException("No output format selected"))
             return@suspendCoroutine
         }
-        val orientation = result.orientation
+        var orientation = result.orientation
 
         var bitmap: Bitmap? = null
 
@@ -681,10 +669,6 @@ class CameraFragment : Fragment() {
         }
 
         if (bitmap != null) {
-            if (isWatermarkEnabled) {
-                bitmap = addWatermark(bitmap)
-            }
-
             val rotationDegrees = when (orientation) {
                 ExifInterface.ORIENTATION_ROTATE_90 -> 90
                 ExifInterface.ORIENTATION_ROTATE_180 -> 180
@@ -693,6 +677,11 @@ class CameraFragment : Fragment() {
             }
             if (rotationDegrees != 0) {
                 bitmap = rotateBitmap(bitmap, rotationDegrees)
+                orientation = ExifInterface.ORIENTATION_NORMAL
+            }
+
+            if (isWatermarkEnabled) {
+                bitmap = addWatermark(bitmap)
             }
 
             val (extension, mimeType, format) = when (outputFormat) {
@@ -720,8 +709,7 @@ class CameraFragment : Fragment() {
                 if (outputFormat == "JPEG") {
                     resolver.openFileDescriptor(uri, "rw")?.use { pfd ->
                         ExifInterface(pfd.fileDescriptor).apply {
-                            // We\'ve already rotated the bitmap, so we can clear the orientation tag
-                            setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
+                            setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString())
                             saveAttributes()
                         }
                     }
@@ -736,8 +724,7 @@ class CameraFragment : Fragment() {
                 FileOutputStream(file).use { it.write(finalBytes) }
                 if (outputFormat == "JPEG") {
                     ExifInterface(file.absolutePath).apply {
-                        // We\'ve already rotated the bitmap, so we can clear the orientation tag
-                        setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
+                        setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString())
                         saveAttributes()
                     }
                 }
