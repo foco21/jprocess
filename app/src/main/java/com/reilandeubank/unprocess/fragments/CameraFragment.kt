@@ -197,7 +197,7 @@ class CameraFragment : Fragment() {
         if (BuildConfig.BETA && !betaDialogShown) {
             AlertDialog.Builder(requireContext())
                 .setTitle("Beta Version")
-                .setMessage("This is a beta version of the application. You may encounter bugs and unexpected behavior. Thank you for testing!")
+                .setMessage("this is a beta version of an overhaul of an update. now all the features might work but please report any errors to me make sure to specifiy the phone model!")
                 .setPositiveButton("OK") { dialog, _ ->
                     dialog.dismiss()
                     prefs.edit().putBoolean("beta_dialog_shown", true).apply()
