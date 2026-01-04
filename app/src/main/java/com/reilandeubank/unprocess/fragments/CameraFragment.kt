@@ -74,7 +74,7 @@ class CameraFragment : Fragment() {
 
     private val fragmentCameraBinding get() = _fragmentCameraBinding!!
 
-    /** Host's navigation controller */
+    /** Host\'s navigation controller */
     private val navController: NavController by lazy {
         Navigation.findNavController(requireActivity(), R.id.fragment_container)
     }
@@ -160,6 +160,46 @@ class CameraFragment : Fragment() {
     @SuppressLint("MissingPermission")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        // Programmatically set the colors for the zoom buttons to avoid inflation errors
+        val colorSurface = com.google.android.material.R.attr.colorSurface
+        val colorSecondaryContainer = com.google.android.material.R.attr.colorSecondaryContainer
+        val colorOnSurface = com.google.android.material.R.attr.colorOnSurface
+        val colorOnSecondaryContainer = com.google.android.material.R.attr.colorOnSecondaryContainer
+
+        val ta = requireContext().obtainStyledAttributes(intArrayOf(colorSurface, colorSecondaryContainer, colorOnSurface, colorOnSecondaryContainer))
+        val colorSurfaceValue = ta.getColor(0, 0)
+        val colorSecondaryContainerValue = ta.getColor(1, 0)
+        val colorOnSurfaceValue = ta.getColor(2, 0)
+        val colorOnSecondaryContainerValue = ta.getColor(3, 0)
+        ta.recycle()
+
+        val backgroundColorStateList = android.content.res.ColorStateList(
+            arrayOf(
+                intArrayOf(android.R.attr.state_checked),
+                intArrayOf(-android.R.attr.state_checked)
+            ),
+            intArrayOf(
+                colorSecondaryContainerValue,
+                Color.argb( (Color.alpha(colorSurfaceValue) * 0.8f).toInt(), Color.red(colorSurfaceValue), Color.green(colorSurfaceValue), Color.blue(colorSurfaceValue) )
+            )
+        )
+
+        val textColorStateList = android.content.res.ColorStateList(
+            arrayOf(
+                intArrayOf(android.R.attr.state_checked),
+                intArrayOf(-android.R.attr.state_checked)
+            ),
+            intArrayOf(
+                colorOnSecondaryContainerValue,
+                colorOnSurfaceValue
+            )
+        )
+
+        fragmentCameraBinding.zoom1x.backgroundTintList = backgroundColorStateList
+        fragmentCameraBinding.zoom1x.setTextColor(textColorStateList)
+        fragmentCameraBinding.zoom2x.backgroundTintList = backgroundColorStateList
+        fragmentCameraBinding.zoom2x.setTextColor(textColorStateList)
 
         val prefs = requireContext().getSharedPreferences("unprocess_prefs", Context.MODE_PRIVATE)
         val betaDialogShown = prefs.getBoolean("beta_dialog_shown", false)
@@ -680,7 +720,7 @@ class CameraFragment : Fragment() {
                 if (outputFormat == "JPEG") {
                     resolver.openFileDescriptor(uri, "rw")?.use { pfd ->
                         ExifInterface(pfd.fileDescriptor).apply {
-                            // We've already rotated the bitmap, so we can clear the orientation tag
+                            // We\'ve already rotated the bitmap, so we can clear the orientation tag
                             setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
                             saveAttributes()
                         }
@@ -696,7 +736,7 @@ class CameraFragment : Fragment() {
                 FileOutputStream(file).use { it.write(finalBytes) }
                 if (outputFormat == "JPEG") {
                     ExifInterface(file.absolutePath).apply {
-                        // We've already rotated the bitmap, so we can clear the orientation tag
+                        // We\'ve already rotated the bitmap, so we can clear the orientation tag
                         setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
                         saveAttributes()
                     }
