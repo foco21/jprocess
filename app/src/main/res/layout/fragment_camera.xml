@@ -38,21 +38,32 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/lens_recycler_view"
-        android:layout_width="0dp"
+    <HorizontalScrollView
+        android:id="@+id/lens_scroll_view"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:scrollbars="none"
         android:layout_marginBottom="16dp"
         app:layout_constraintBottom_toTopOf="@id/capture_button"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/lens_chip_group"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            app:singleSelection="true"
+            app:selectionRequired="true"/>
+
+    </HorizontalScrollView>
 
     <com.google.android.material.button.MaterialButtonToggleGroup
         android:id="@+id/zoom_toggle_group"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginBottom="16dp"
-        app:layout_constraintBottom_toTopOf="@id/lens_recycler_view"
+        app:layout_constraintBottom_toTopOf="@id/lens_scroll_view"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:singleSelection="true"

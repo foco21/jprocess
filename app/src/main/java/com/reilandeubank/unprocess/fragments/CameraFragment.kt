@@ -31,7 +31,7 @@ import android.provider.MediaStore
 import android.util.Log
 import android.util.Size
 import android.view.LayoutInflater
-import android.view.MotionEvent
+import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.View
 import android.view.ViewGroup
@@ -43,10 +43,9 @@ import androidx.lifecycle.Observer
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavController
 import androidx.navigation.Navigation
-import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.chip.Chip
 import com.reilandeubank.unprocess.BuildConfig
 import com.reilandeubank.unprocess.R
-import com.reilandeubank.unprocess.adapters.LensAdapter
 import com.reilandeubank.unprocess.databinding.FragmentCameraBinding
 import com.reilandeubank.unprocess.utils.OrientationLiveData
 import com.reilandeubank.unprocess.utils.computeExifOrientation
@@ -66,7 +65,6 @@ import java.util.concurrent.TimeoutException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 class CameraFragment : Fragment() {
@@ -192,6 +190,7 @@ class CameraFragment : Fragment() {
 
         fragmentCameraBinding.viewFinder.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceDestroyed(holder: SurfaceHolder) = Unit
+
             override fun surfaceChanged(
                 holder: SurfaceHolder,
                 format: Int,
@@ -212,23 +211,24 @@ class CameraFragment : Fragment() {
     private fun setupUI() {
         availableLenses = enumerateCameras(cameraManager)
 
-        val lensNames = availableLenses.map { it.name }
-        val lensAdapter = LensAdapter(lensNames) { lensName ->
-            val lens = availableLenses.find { it.name == lensName }!!
-            if (selectedLens?.cameraId != lens.cameraId) {
-                selectedLens = lens
-                selectedFormat = null // Force re-selection of format
-                lifecycleScope.launch(Dispatchers.Main) {
-                    if (::camera.isInitialized) camera.close()
-                    if (::imageReader.isInitialized) imageReader.close()
-                    initializeCamera()
+        _fragmentCameraBinding?.lensChipGroup?.removeAllViews()
+        availableLenses.forEach { lens ->
+            val chip = Chip(requireContext()).apply {
+                text = lens.name
+                isCheckable = true
+                setOnClickListener { _ ->
+                    if (selectedLens?.cameraId != lens.cameraId) {
+                        selectedLens = lens
+                        selectedFormat = null // Force re-selection of format
+                        lifecycleScope.launch(Dispatchers.Main) {
+                            if (::camera.isInitialized) camera.close()
+                            if (::imageReader.isInitialized) imageReader.close()
+                            initializeCamera()
+                        }
+                    }
                 }
             }
-        }
-
-        fragmentCameraBinding.lensRecyclerView.apply {
-            layoutManager = LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
-            adapter = lensAdapter
+            _fragmentCameraBinding?.lensChipGroup?.addView(chip)
         }
     }
 
@@ -298,6 +298,13 @@ class CameraFragment : Fragment() {
         }
         val cameraId = selectedLens!!.cameraId
         characteristics = cameraManager.getCameraCharacteristics(cameraId)
+
+        _fragmentCameraBinding?.lensChipGroup?.let {
+            for (i in 0 until it.childCount) {
+                val chip = it.getChildAt(i) as Chip
+                chip.isChecked = (chip.text == selectedLens?.name)
+            }
+        }
 
         // Determine the telephoto zoom factor for logical cameras
         if (selectedLens!!.name.contains("Telephoto") || selectedLens!!.isLogicalCamera) {
@@ -467,7 +474,7 @@ class CameraFragment : Fragment() {
 
     private suspend fun createCaptureSession(
         device: CameraDevice,
-        targets: List<android.view.Surface>,
+        targets: List<Surface>,
         handler: Handler? = null
     ): CameraCaptureSession = suspendCoroutine { cont ->
         device.createCaptureSession(targets, object : CameraCaptureSession.StateCallback() {
