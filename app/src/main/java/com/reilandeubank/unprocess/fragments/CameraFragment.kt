@@ -128,6 +128,7 @@ class CameraFragment : Fragment() {
     private var isWatermarkEnabled: Boolean = false
     private var currentZoom: Float = 1.0f
     private var telephotoZoom: Float = 1.0f
+    private var preferredAspectRatio: String? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -287,12 +288,14 @@ class CameraFragment : Fragment() {
 
             if (supportedFormats.isNotEmpty()) {
                 val orientation = characteristics.get(CameraCharacteristics.LENS_FACING)
+                val isLogical = capabilities.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA)
                 val focalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
 
-                var lensName = when (orientation) {
-                    CameraCharacteristics.LENS_FACING_FRONT -> "Front"
-                    CameraCharacteristics.LENS_FACING_EXTERNAL -> "External"
-                    CameraCharacteristics.LENS_FACING_BACK -> {
+                var lensName = when {
+                    isLogical -> "Logical"
+                    orientation == CameraCharacteristics.LENS_FACING_FRONT -> "Front"
+                    orientation == CameraCharacteristics.LENS_FACING_EXTERNAL -> "External"
+                    orientation == CameraCharacteristics.LENS_FACING_BACK -> {
                         if (focalLengths != null && focalLengths.isNotEmpty()) {
                             when {
                                 focalLengths.minOrNull()!! < 3.0f -> "Ultra-Wide"
@@ -306,7 +309,6 @@ class CameraFragment : Fragment() {
                     else -> "Unknown"
                 }
 
-                val isLogical = capabilities.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA)
                 val physicalCameraIds = if (isLogical) characteristics.physicalCameraIds else emptySet()
 
                 cameraInfoList.add(CameraInfo(lensName, id, supportedFormats.distinct(), isLogical, physicalCameraIds))
@@ -322,7 +324,7 @@ class CameraFragment : Fragment() {
         val prefs = requireContext().getSharedPreferences("unprocess_prefs", Context.MODE_PRIVATE)
         isWatermarkEnabled = prefs.getBoolean("watermark_enabled", false)
         selectedFormat = prefs.getString("preferred_format", "JPEG")
-        val preferredAspectRatio = prefs.getString("preferred_aspect_ratio", "3:4")
+        preferredAspectRatio = prefs.getString("preferred_aspect_ratio", "3:4")
         val aspectRatio = when (preferredAspectRatio) {
             "3:4" -> 4f / 3f
             "9:16" -> 16f / 9f
@@ -619,7 +621,7 @@ class CameraFragment : Fragment() {
             textSize = 48f
             isAntiAlias = true
         }
-        val text = "${Build.MODEL} - ${selectedLens?.name} - $selectedFormat"
+        val text = "${Build.MODEL} - ${selectedLens?.name} - $selectedFormat - $preferredAspectRatio"
         val dateText = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
         canvas.drawText(text, 20f, newBitmap.height - 80f, paint)
         canvas.drawText(dateText, 20f, newBitmap.height - 30f, paint)

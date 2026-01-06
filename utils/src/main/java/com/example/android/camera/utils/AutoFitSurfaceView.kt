@@ -23,8 +23,7 @@ import android.view.SurfaceView
 import kotlin.math.roundToInt
 
 /**
- * A [SurfaceView] that can be adjusted to a specified aspect ratio and
- * performs center-crop transformation of input frames.
+ * A [SurfaceView] that can be adjusted to a specified aspect ratio.
  */
 class AutoFitSurfaceView @JvmOverloads constructor(
         context: Context,
@@ -44,7 +43,6 @@ class AutoFitSurfaceView @JvmOverloads constructor(
     fun setAspectRatio(width: Int, height: Int) {
         require(width > 0 && height > 0) { "Size cannot be negative" }
         aspectRatio = width.toFloat() / height.toFloat()
-        holder.setFixedSize(width, height)
         requestLayout()
     }
 
@@ -54,23 +52,20 @@ class AutoFitSurfaceView @JvmOverloads constructor(
         val height = MeasureSpec.getSize(heightMeasureSpec)
         if (aspectRatio == 0f) {
             setMeasuredDimension(width, height)
-        } else {
-
-            // Performs center-crop transformation of the camera frames
-            val newWidth: Int
-            val newHeight: Int
-            val actualRatio = if (width > height) aspectRatio else 1f / aspectRatio
-            if (width < height * actualRatio) {
-                newHeight = height
-                newWidth = (height * actualRatio).roundToInt()
-            } else {
-                newWidth = width
-                newHeight = (width / actualRatio).roundToInt()
-            }
-
-            Log.d(TAG, "Measured dimensions set: $newWidth x $newHeight")
-            setMeasuredDimension(newWidth, newHeight)
+            return
         }
+
+        // Fit the view to the aspect ratio of the camera preview.
+        var newWidth = width
+        var newHeight = (newWidth / aspectRatio).roundToInt()
+
+        if (newHeight > height) {
+            newHeight = height
+            newWidth = (newHeight * aspectRatio).roundToInt()
+        }
+
+        Log.d(TAG, "Measured dimensions set: $newWidth x $newHeight")
+        setMeasuredDimension(newWidth, newHeight)
     }
 
     companion object {
