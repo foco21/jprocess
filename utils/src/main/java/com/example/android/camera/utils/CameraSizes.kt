@@ -21,6 +21,7 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.params.StreamConfigurationMap
 import android.util.Size
 import android.view.Display
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -43,15 +44,14 @@ fun getDisplaySmartSize(display: Display): SmartSize {
 }
 
 /**
- * Returns the largest available PREVIEW size. For more information, see:
- * https://d.android.com/reference/android/hardware/camera2/CameraDevice and
- * https://developer.android.com/reference/android/hardware/camera2/params/StreamConfigurationMap
+ * Returns the largest available PREVIEW size that matches the given aspect ratio.
  */
 fun <T>getPreviewOutputSize(
         display: Display,
         characteristics: CameraCharacteristics,
         targetClass: Class<T>,
-        format: Int? = null
+        format: Int? = null,
+        aspectRatio: Float? = null
 ): Size {
 
     // Find which is smaller: screen or 1080p
@@ -70,9 +70,19 @@ fun <T>getPreviewOutputSize(
         config.getOutputSizes(targetClass) else config.getOutputSizes(format)
 
     // Get available sizes and sort them by area from largest to smallest
-    val validSizes = allSizes
+    var validSizes = allSizes
             .sortedWith(compareBy { it.height * it.width })
             .map { SmartSize(it.width, it.height) }.reversed()
+
+    // Filter by aspect ratio if provided
+    if (aspectRatio != null) {
+        val filteredSizes = validSizes.filter { s ->
+            abs(s.long.toFloat() / s.short - aspectRatio) < 0.01f
+        }
+        if (filteredSizes.isNotEmpty()) {
+            validSizes = filteredSizes
+        }
+    }
 
     // Then, get the largest output size that is smaller or equal than our max size
     return validSizes.first { it.long <= maxSize.long && it.short <= maxSize.short }.size

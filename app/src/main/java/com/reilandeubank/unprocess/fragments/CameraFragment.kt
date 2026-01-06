@@ -322,6 +322,14 @@ class CameraFragment : Fragment() {
         val prefs = requireContext().getSharedPreferences("unprocess_prefs", Context.MODE_PRIVATE)
         isWatermarkEnabled = prefs.getBoolean("watermark_enabled", false)
         selectedFormat = prefs.getString("preferred_format", "JPEG")
+        val preferredAspectRatio = prefs.getString("preferred_aspect_ratio", "3:4")
+        val aspectRatio = when (preferredAspectRatio) {
+            "3:4" -> 4f / 3f
+            "9:16" -> 16f / 9f
+            "1:1" -> 1f
+            else -> null
+        }
+
 
         if (selectedLens == null) {
             if (availableLenses.isNotEmpty()) {
@@ -386,7 +394,8 @@ class CameraFragment : Fragment() {
         val previewSize = getPreviewOutputSize(
             fragmentCameraBinding.viewFinder.display,
             characteristics,
-            SurfaceHolder::class.java
+            SurfaceHolder::class.java,
+            aspectRatio = aspectRatio
         )
         fragmentCameraBinding.viewFinder.setAspectRatio(previewSize.width, previewSize.height)
 
@@ -407,8 +416,16 @@ class CameraFragment : Fragment() {
             }
         }
 
-        val size = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
-            .getOutputSizes(pixelFormat).maxByOrNull { it.height * it.width }!!
+        val outputSizes = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!.getOutputSizes(pixelFormat)
+        val size = if (aspectRatio != null) {
+            outputSizes.filter { s ->
+                val ratio = s.width.toFloat() / s.height.toFloat()
+                (ratio - aspectRatio).let { kotlin.math.abs(it) < 0.01f }
+            }.maxByOrNull { it.height * it.width }
+        } else {
+            outputSizes.maxByOrNull { it.height * it.width }
+        } ?: outputSizes.maxByOrNull { it.height * it.width }!!
+
         imageReader = ImageReader.newInstance(size.width, size.height, pixelFormat, IMAGE_BUFFER_SIZE)
 
         val targets = listOf(fragmentCameraBinding.viewFinder.holder.surface, imageReader.surface)

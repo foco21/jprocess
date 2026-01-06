@@ -108,6 +108,7 @@ class SettingsFragment : Fragment() {
             form, that is based on (or derived from) the Work and for which the
             editorial revisions, annotations, elaborations, or other modifications
             represent, as a whole, an original work of authorship. For the purposes
+
             of this License, Derivative Works shall not include works that remain
             separable from, or merely link (or bind by name) to the interfaces of,
             the Work and Derivative Works thereof.
@@ -200,6 +201,7 @@ class SettingsFragment : Fragment() {
             this License, without any additional terms or conditions.
             Notwithstanding the above, nothing herein shall supersede or modify
             the terms of any separate license agreement you may have executed
+
             with Licensor regarding such Contributions.
 
             6. Trademarks. This License does not grant permission to use the trade
@@ -257,17 +259,35 @@ class SettingsFragment : Fragment() {
 
         // Format spinner
         val formats = arrayOf("JPEG", "RAW", "PNG")
-        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, formats)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        binding.formatSpinner.adapter = adapter
+        val formatAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, formats)
+        formatAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.formatSpinner.adapter = formatAdapter
 
         val preferredFormat = prefs.getString("preferred_format", "JPEG")
-        val selection = formats.indexOf(preferredFormat)
-        binding.formatSpinner.setSelection(selection)
+        val formatSelection = formats.indexOf(preferredFormat)
+        binding.formatSpinner.setSelection(formatSelection)
 
         binding.formatSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
                 prefs.edit().putString("preferred_format", formats[position]).apply()
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        // Aspect Ratio Spinner
+        val aspectRatios = arrayOf("3:4", "9:16")
+        val aspectRatioAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, aspectRatios)
+        aspectRatioAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.aspectRatioSpinner.adapter = aspectRatioAdapter
+
+        val preferredAspectRatio = prefs.getString("preferred_aspect_ratio", "3:4")
+        val aspectRatioSelection = aspectRatios.indexOf(preferredAspectRatio)
+        binding.aspectRatioSpinner.setSelection(aspectRatioSelection)
+
+        binding.aspectRatioSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
+                prefs.edit().putString("preferred_aspect_ratio", aspectRatios[position]).apply()
             }
 
             override fun onNothingSelected(parent: AdapterView<*>?) {}
