@@ -24,8 +24,10 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import com.reilandeubank.unprocess.R
+import kotlinx.coroutines.launch
 
 private const val PERMISSIONS_REQUEST_CODE = 10
 private val PERMISSIONS_REQUIRED = mutableListOf(Manifest.permission.CAMERA).apply {
@@ -50,12 +52,22 @@ class PermissionsFragment : Fragment() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (hasPermissions(requireContext())) {
-            // If permissions have already been granted, proceed
-            findNavController().navigate(PermissionsFragmentDirections.actionPermissionsToCamera())
-        } else {
+        if (!hasPermissions(requireContext())) {
             // Request camera-related permissions
             requestPermissions(PERMISSIONS_REQUIRED, PERMISSIONS_REQUEST_CODE)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        if (hasPermissions(requireContext())) {
+            // If permissions have already been granted, proceed
+            lifecycleScope.launch {
+                if (findNavController().currentDestination?.id == R.id.permissions_fragment) {
+                    findNavController().navigate(PermissionsFragmentDirections.actionPermissionsToCamera())
+                }
+            }
         }
     }
 
@@ -68,7 +80,11 @@ class PermissionsFragment : Fragment() {
         if (requestCode == PERMISSIONS_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
                 // Takes the user to the success fragment when permission is granted
-                findNavController().navigate(PermissionsFragmentDirections.actionPermissionsToCamera())
+                lifecycleScope.launch {
+                    if (findNavController().currentDestination?.id == R.id.permissions_fragment) {
+                        findNavController().navigate(PermissionsFragmentDirections.actionPermissionsToCamera())
+                    }
+                }
             } else {
                 Toast.makeText(context, "Permission request denied", Toast.LENGTH_LONG).show()
                 requireActivity().finish()
