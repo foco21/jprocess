@@ -30,6 +30,8 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.provider.MediaStore
 import android.util.Log
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.Surface
 import android.view.SurfaceHolder
@@ -52,6 +54,7 @@ import com.reilandeubank.unprocess.utils.OrientationLiveData
 import com.reilandeubank.unprocess.utils.computeExifOrientation
 import com.reilandeubank.unprocess.utils.getPreviewOutputSize
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.ByteArrayOutputStream
@@ -75,7 +78,7 @@ class CameraFragment : Fragment() {
 
     private val fragmentCameraBinding get() = _fragmentCameraBinding!!
 
-    /** Host\'s navigation controller */
+    /** Host's navigation controller */
     private val navController: NavController by lazy {
         Navigation.findNavController(requireActivity(), R.id.fragment_container)
     }
@@ -442,19 +445,47 @@ class CameraFragment : Fragment() {
 
         fragmentCameraBinding.captureButton.setOnClickListener {
             it.isEnabled = false
-            lifecycleScope.launch(Dispatchers.IO) {
-                try {
-                    takePhoto().use { result ->
-                        Log.d(TAG, "Result received: $result")
-                        saveResult(result)
-                        requireActivity().runOnUiThread {
-                            Toast.makeText(requireContext(), "Photo saved", Toast.LENGTH_SHORT).show()
+            lifecycleScope.launch(Dispatchers.Main) {
+                // Flash the screen to indicate that a photo is being taken
+                val typedValue = TypedValue()
+                requireContext().theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
+                val color = typedValue.data
+                fragmentCameraBinding.overlay.setBackgroundColor(color)
+                fragmentCameraBinding.overlay.alpha = 0.5f
+                fragmentCameraBinding.overlay.visibility = View.VISIBLE
+                fragmentCameraBinding.overlay.animate().alpha(0f).setDuration(250).withEndAction {
+                    fragmentCameraBinding.overlay.visibility = View.GONE
+                }.start()
+
+                lifecycleScope.launch(Dispatchers.IO) {
+                    try {
+                        takePhoto().use { result ->
+                            Log.d(TAG, "Result received: $result")
+                            saveResult(result)
+                            lifecycleScope.launch(Dispatchers.Main) {
+                                val banner = fragmentCameraBinding.notificationBanner
+                                banner.alpha = 0f
+                                banner.visibility = View.VISIBLE
+                                banner.animate()
+                                    .alpha(1f)
+                                    .setDuration(300)
+                                    .withEndAction {
+                                        banner.postDelayed({
+                                            banner.animate()
+                                                .alpha(0f)
+                                                .setDuration(300)
+                                                .withEndAction { banner.visibility = View.GONE }
+                                                .start()
+                                        }, 2000)
+                                    }
+                                    .start()
+                            }
                         }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error taking photo", e)
+                    } finally {
+                        it.post { it.isEnabled = true }
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error taking photo", e)
-                } finally {
-                    it.post { it.isEnabled = true }
                 }
             }
         }
