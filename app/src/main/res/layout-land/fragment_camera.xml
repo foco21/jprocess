@@ -41,34 +41,27 @@
         android:contentDescription="Settings" />
 
     <ImageButton
+        android:id="@+id/gallery_button"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/scrim_circle_background"
+        android:src="@drawable/ic_photo"
+        android:contentDescription="Gallery"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
+
+    <ImageButton
         android:id="@+id/capture_button"
         android:layout_width="96dp"
         android:layout_height="96dp"
         android:layout_marginEnd="32dp"
         android:background="@drawable/ic_shutter"
         android:contentDescription="Capture"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <FrameLayout
-        android:layout_width="56dp"
-        android:layout_height="56dp"
-        android:layout_marginTop="24dp"
-        android:layout_marginEnd="48dp"
-        android:background="@drawable/scrim_circle_background"
-        app:layout_constraintTop_toBottomOf="@id/capture_button"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <ImageButton
-            android:id="@+id/gallery_button"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_photo"
-            android:contentDescription="Gallery" />
-
-    </FrameLayout>
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <LinearLayout
         android:layout_width="wrap_content"
@@ -96,6 +89,14 @@
                 android:text="1x" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/zoom_2x"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="18sp"
+                android:text="2x" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/zoom_4x"
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="wrap_content"
@@ -105,29 +106,13 @@
 
         </com.google.android.material.button.MaterialButtonToggleGroup>
 
-        <com.google.android.material.button.MaterialButtonToggleGroup
-            android:id="@+id/lens_toggle_group"
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/lens_chip_group"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            app:singleSelection="true"
-            app:selectionRequired="true">
+            app:singleLine="true" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/lens_front"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Front" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/lens_logical"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Logical" />
-
-        </com.google.android.material.button.MaterialButtonToggleGroup>
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

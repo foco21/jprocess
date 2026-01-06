@@ -43,7 +43,8 @@
             android:name=".MainActivity"
             android:clearTaskOnLaunch="true"
             android:exported="true"
-            android:theme="@style/AppTheme">
+            android:theme="@style/AppTheme"
+            android:configChanges="orientation|screenSize">
 
             <!-- Main app intent filter -->
             <intent-filter>

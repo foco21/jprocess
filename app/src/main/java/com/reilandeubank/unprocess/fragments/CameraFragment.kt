@@ -19,6 +19,7 @@ package com.reilandeubank.unprocess.fragments
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.*
 import android.hardware.camera2.*
 import android.media.Image
@@ -143,6 +144,17 @@ class CameraFragment : Fragment() {
         return fragmentCameraBinding.root
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val container = view?.parent as? ViewGroup
+        container?.let {
+            val newView = onCreateView(layoutInflater.cloneInContext(requireContext()), it, null)
+            it.removeView(view)
+            it.addView(newView)
+            onViewCreated(newView, null)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         // Make sure that all permissions are still present, since the
@@ -197,11 +209,6 @@ class CameraFragment : Fragment() {
         fragmentCameraBinding.zoom2x?.setTextColor(textColorStateList)
         fragmentCameraBinding.zoom4x?.backgroundTintList = backgroundColorStateList
         fragmentCameraBinding.zoom4x?.setTextColor(textColorStateList)
-        fragmentCameraBinding.lensFront?.backgroundTintList = backgroundColorStateList
-        fragmentCameraBinding.lensFront?.setTextColor(textColorStateList)
-        fragmentCameraBinding.lensLogical?.backgroundTintList = backgroundColorStateList
-        fragmentCameraBinding.lensLogical?.setTextColor(textColorStateList)
-
 
         val prefs = requireContext().getSharedPreferences("unprocess_prefs", Context.MODE_PRIVATE)
         val betaDialogShown = prefs.getBoolean("beta_dialog_shown", false)
@@ -232,25 +239,6 @@ class CameraFragment : Fragment() {
                     R.id.zoom_1x -> setZoom(1.0f)
                     R.id.zoom_2x -> setZoom(telephotoZoom)
                     R.id.zoom_4x -> setZoom(telephotoZoom)
-                }
-            }
-        }
-
-        fragmentCameraBinding.lensToggleGroup?.addOnButtonCheckedListener { _, checkedId, isChecked ->
-            if (isChecked) {
-                val lens = when (checkedId) {
-                    R.id.lens_front -> availableLenses.find { it.name == "Front" }
-                    R.id.lens_logical -> availableLenses.find { it.name == "Logical" }
-                    else -> null
-                }
-                if (lens != null && selectedLens?.cameraId != lens.cameraId) {
-                    selectedLens = lens
-                    selectedFormat = null // Force re-selection of format
-                    lifecycleScope.launch(Dispatchers.Main) {
-                        if (::camera.isInitialized) camera.close()
-                        if (::imageReader.isInitialized) imageReader.close()
-                        initializeCamera()
-                    }
                 }
             }
         }
@@ -299,9 +287,6 @@ class CameraFragment : Fragment() {
                 it.addView(chip)
             }
         }
-
-        _fragmentCameraBinding?.lensFront?.visibility = if (availableLenses.any { it.name == "Front" }) View.VISIBLE else View.GONE
-        _fragmentCameraBinding?.lensLogical?.visibility = if (availableLenses.any { it.name == "Logical" }) View.VISIBLE else View.GONE
     }
 
     @SuppressLint("InlinedApi")
@@ -384,14 +369,6 @@ class CameraFragment : Fragment() {
             for (i in 0 until it.childCount) {
                 val chip = it.getChildAt(i) as Chip
                 chip.isChecked = (chip.text == selectedLens?.name)
-            }
-        }
-
-        _fragmentCameraBinding?.lensToggleGroup?.let {
-            if (selectedLens?.name == "Front") {
-                it.check(R.id.lens_front)
-            } else if (selectedLens?.name == "Logical") {
-                it.check(R.id.lens_logical)
             }
         }
 
