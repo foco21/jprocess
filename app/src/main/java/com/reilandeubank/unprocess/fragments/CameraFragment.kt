@@ -52,6 +52,7 @@ import com.reilandeubank.unprocess.R
 import com.reilandeubank.unprocess.databinding.FragmentCameraBinding
 import com.reilandeubank.unprocess.utils.OrientationLiveData
 import com.reilandeubank.unprocess.utils.computeExifOrientation
+import com.reilandeubank.unprocess.utils.decodeExifOrientation
 import com.reilandeubank.unprocess.utils.getPreviewOutputSize
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -696,17 +697,11 @@ class CameraFragment : Fragment() {
         return newBitmap
     }
 
-    private fun rotateBitmap(bitmap: Bitmap, rotationDegrees: Int): Bitmap {
-        val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
-        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-    }
-
     private suspend fun saveResult(result: CombinedCaptureResult): File = suspendCoroutine { cont ->
         val outputFormat = selectedFormat ?: run {
             cont.resumeWithException(RuntimeException("No output format selected"))
             return@suspendCoroutine
         }
-        var orientation = result.orientation
 
         var bitmap: Bitmap? = null
 
@@ -715,7 +710,7 @@ class CameraFragment : Fragment() {
             ImageFormat.RAW_SENSOR -> {
                 val dngCreator = DngCreator(characteristics, result.metadata)
                 if (outputFormat == "RAW") {
-                    dngCreator.setOrientation(orientation)
+                    dngCreator.setOrientation(result.orientation)
                     val filename = "RAW_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.dng"
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         val contentValues = android.content.ContentValues().apply {
@@ -756,19 +751,13 @@ class CameraFragment : Fragment() {
         }
 
         if (bitmap != null) {
-            val rotationDegrees = when (orientation) {
-                ExifInterface.ORIENTATION_ROTATE_90 -> 90
-                ExifInterface.ORIENTATION_ROTATE_180 -> 180
-                ExifInterface.ORIENTATION_ROTATE_270 -> 270
-                else -> 0
-            }
-            if (rotationDegrees != 0) {
-                bitmap = rotateBitmap(bitmap, rotationDegrees)
-                orientation = ExifInterface.ORIENTATION_NORMAL
-            }
+            val matrix = decodeExifOrientation(result.orientation)
+            val rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
 
             if (isWatermarkEnabled) {
-                bitmap = addWatermark(bitmap)
+                bitmap = addWatermark(rotatedBitmap)
+            } else {
+                bitmap = rotatedBitmap
             }
 
             val (extension, mimeType, format) = when (outputFormat) {
@@ -796,7 +785,7 @@ class CameraFragment : Fragment() {
                 if (outputFormat == "JPEG") {
                     resolver.openFileDescriptor(uri, "rw")?.use { pfd ->
                         ExifInterface(pfd.fileDescriptor).apply {
-                            setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString())
+                            setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
                             saveAttributes()
                         }
                     }
@@ -811,7 +800,7 @@ class CameraFragment : Fragment() {
                 FileOutputStream(file).use { it.write(finalBytes) }
                 if (outputFormat == "JPEG") {
                     ExifInterface(file.absolutePath).apply {
-                        setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString())
+                        setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
                         saveAttributes()
                     }
                 }
