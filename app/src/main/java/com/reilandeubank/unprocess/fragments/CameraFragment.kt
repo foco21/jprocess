@@ -192,8 +192,15 @@ class CameraFragment : Fragment() {
 
         fragmentCameraBinding.zoom1x.backgroundTintList = backgroundColorStateList
         fragmentCameraBinding.zoom1x.setTextColor(textColorStateList)
-        fragmentCameraBinding.zoom2x.backgroundTintList = backgroundColorStateList
-        fragmentCameraBinding.zoom2x.setTextColor(textColorStateList)
+        fragmentCameraBinding.zoom2x?.backgroundTintList = backgroundColorStateList
+        fragmentCameraBinding.zoom2x?.setTextColor(textColorStateList)
+        fragmentCameraBinding.zoom4x?.backgroundTintList = backgroundColorStateList
+        fragmentCameraBinding.zoom4x?.setTextColor(textColorStateList)
+        fragmentCameraBinding.lensFront?.backgroundTintList = backgroundColorStateList
+        fragmentCameraBinding.lensFront?.setTextColor(textColorStateList)
+        fragmentCameraBinding.lensLogical?.backgroundTintList = backgroundColorStateList
+        fragmentCameraBinding.lensLogical?.setTextColor(textColorStateList)
+
 
         val prefs = requireContext().getSharedPreferences("unprocess_prefs", Context.MODE_PRIVATE)
         val betaDialogShown = prefs.getBoolean("beta_dialog_shown", false)
@@ -223,6 +230,26 @@ class CameraFragment : Fragment() {
                 when (checkedId) {
                     R.id.zoom_1x -> setZoom(1.0f)
                     R.id.zoom_2x -> setZoom(telephotoZoom)
+                    R.id.zoom_4x -> setZoom(telephotoZoom)
+                }
+            }
+        }
+
+        fragmentCameraBinding.lensToggleGroup?.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (isChecked) {
+                val lens = when (checkedId) {
+                    R.id.lens_front -> availableLenses.find { it.name == "Front" }
+                    R.id.lens_logical -> availableLenses.find { it.name == "Logical" }
+                    else -> null
+                }
+                if (lens != null && selectedLens?.cameraId != lens.cameraId) {
+                    selectedLens = lens
+                    selectedFormat = null // Force re-selection of format
+                    lifecycleScope.launch(Dispatchers.Main) {
+                        if (::camera.isInitialized) camera.close()
+                        if (::imageReader.isInitialized) imageReader.close()
+                        initializeCamera()
+                    }
                 }
             }
         }
@@ -252,23 +279,28 @@ class CameraFragment : Fragment() {
 
         _fragmentCameraBinding?.lensChipGroup?.removeAllViews()
         availableLenses.forEach { lens ->
-            val chip = Chip(requireContext()).apply {
-                text = lens.name
-                isCheckable = true
-                setOnClickListener { _ ->
-                    if (selectedLens?.cameraId != lens.cameraId) {
-                        selectedLens = lens
-                        selectedFormat = null // Force re-selection of format
-                        lifecycleScope.launch(Dispatchers.Main) {
-                            if (::camera.isInitialized) camera.close()
-                            if (::imageReader.isInitialized) imageReader.close()
-                            initializeCamera()
+            _fragmentCameraBinding?.lensChipGroup?.let {
+                val chip = Chip(requireContext()).apply {
+                    text = lens.name
+                    isCheckable = true
+                    setOnClickListener { _ ->
+                        if (selectedLens?.cameraId != lens.cameraId) {
+                            selectedLens = lens
+                            selectedFormat = null // Force re-selection of format
+                            lifecycleScope.launch(Dispatchers.Main) {
+                                if (::camera.isInitialized) camera.close()
+                                if (::imageReader.isInitialized) imageReader.close()
+                                initializeCamera()
+                            }
                         }
                     }
                 }
+                it.addView(chip)
             }
-            _fragmentCameraBinding?.lensChipGroup?.addView(chip)
         }
+
+        _fragmentCameraBinding?.lensFront?.visibility = if (availableLenses.any { it.name == "Front" }) View.VISIBLE else View.GONE
+        _fragmentCameraBinding?.lensLogical?.visibility = if (availableLenses.any { it.name == "Logical" }) View.VISIBLE else View.GONE
     }
 
     @SuppressLint("InlinedApi")
@@ -354,6 +386,14 @@ class CameraFragment : Fragment() {
             }
         }
 
+        _fragmentCameraBinding?.lensToggleGroup?.let {
+            if (selectedLens?.name == "Front") {
+                it.check(R.id.lens_front)
+            } else if (selectedLens?.name == "Logical") {
+                it.check(R.id.lens_logical)
+            }
+        }
+
         // Determine the telephoto zoom factor for logical cameras
         if (selectedLens!!.name.contains("Telephoto") || selectedLens!!.isLogicalCamera) {
             var wideAngleFocalLength = -1f
@@ -379,7 +419,8 @@ class CameraFragment : Fragment() {
             if (wideAngleFocalLength != -1f && telephotoFocalLength != -1f) {
                 telephotoZoom = (telephotoFocalLength / wideAngleFocalLength)
                 fragmentCameraBinding.zoomToggleGroup.visibility = View.VISIBLE
-                fragmentCameraBinding.zoom2x.text = "${telephotoZoom.roundToInt()}x"
+                fragmentCameraBinding.zoom2x?.text = "${telephotoZoom.roundToInt()}x"
+                fragmentCameraBinding.zoom4x?.text = "${telephotoZoom.roundToInt()}x"
             } else {
                 fragmentCameraBinding.zoomToggleGroup.visibility = View.GONE
             }
@@ -437,11 +478,7 @@ class CameraFragment : Fragment() {
 
         session = createCaptureSession(camera, targets, cameraHandler)
 
-        val captureRequest = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
-            addTarget(fragmentCameraBinding.viewFinder.holder.surface)
-        }
-
-        session.setRepeatingRequest(captureRequest.build(), null, cameraHandler)
+        setZoom(1.0f)
 
         fragmentCameraBinding.captureButton.setOnClickListener {
             it.isEnabled = false
