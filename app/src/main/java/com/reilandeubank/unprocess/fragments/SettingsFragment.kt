@@ -35,9 +35,7 @@ class SettingsFragment : Fragment() {
         val prefs = requireContext().getSharedPreferences("unprocess_prefs", Context.MODE_PRIVATE)
 
         // About section
-        val version = "0.1.1 beta"
-        val appName = "junproccess"
-        val forkName = "juneunprocess"
+        val forkName = "JuneUnprocess"
         val originalProjectLink = "https://github.com/reilandeubank/unprocess"
         val attributionText = """
             Based on: Unprocess by Reilandeubank (Apache-2.0)
@@ -245,7 +243,7 @@ class SettingsFragment : Fragment() {
             END OF TERMS AND CONDITIONS
         """.trimIndent()
 
-        binding.appNameAndVersion.text = "$appName v$version"
+        binding.appNameAndVersion.text = "JuneProcess v0.2.0 shimmering hours"
         binding.forkName.text = forkName
         binding.originalProject.text = attributionText
         binding.thirdPartyLibraries.text = thirdPartyLibraries

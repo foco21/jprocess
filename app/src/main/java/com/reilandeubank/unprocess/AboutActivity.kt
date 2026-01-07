@@ -14,8 +14,8 @@ class AboutActivity : AppCompatActivity() {
         activityAboutBinding = ActivityAboutBinding.inflate(layoutInflater)
         setContentView(activityAboutBinding.root)
 
-        val appName = "junproccess"
-        val forkName = "juneunprocess"
+        val appName = "JuneProcess"
+        val forkName = "JuneUnprocess"
         val originalProjectLink = "https://github.com/reilandeubank/unprocess"
         val attributionText = """
             Based on: Unprocess by Reilandeubank (Apache-2.0)
@@ -149,7 +149,7 @@ class AboutActivity : AppCompatActivity() {
             the Derivative Works; and
 
             (d) If the Work includes a "NOTICE" text file as part of its
-            distribution, then any Derivative Works that You distribute must
+            distribution, then any Derivative Works that you distribute must
             include a readable copy of the attribution notices contained
             within such NOTICE file, excluding those notices that do not
             pertain to any part of the Derivative Works, in at least one
@@ -160,7 +160,7 @@ class AboutActivity : AppCompatActivity() {
             wherever such third-party notices normally appear. The contents
             of the NOTICE file are for informational purposes only and
             do not modify the License. You may add Your own attribution
-            notices within Derivative Works that You distribute, alongside
+            notices within Derivative Works that you distribute, alongside
             or as an addendum to the NOTICE text from the Work, provided
             that such additional attribution notices cannot be construed
             as modifying the License.
@@ -222,7 +222,7 @@ class AboutActivity : AppCompatActivity() {
         """.trimIndent()
 
 
-        activityAboutBinding.appNameAndVersion.text = "$appName v${BuildConfig.VERSION_NAME}${BuildConfig.VERSION_NAME_SUFFIX}"
+        activityAboutBinding.appNameAndVersion.text = "JuneProcess v0.2.0 shimmering hours"
         activityAboutBinding.forkName.text = forkName
         activityAboutBinding.originalProject.text = attributionText
         activityAboutBinding.thirdPartyLibraries.text = thirdPartyLibraries
