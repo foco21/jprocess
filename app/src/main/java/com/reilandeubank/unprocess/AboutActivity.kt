@@ -14,7 +14,6 @@ class AboutActivity : AppCompatActivity() {
         activityAboutBinding = ActivityAboutBinding.inflate(layoutInflater)
         setContentView(activityAboutBinding.root)
 
-        val version = "v0.1.1 first light"
         val appName = "junproccess"
         val forkName = "juneunprocess"
         val originalProjectLink = "https://github.com/reilandeubank/unprocess"
@@ -223,7 +222,7 @@ class AboutActivity : AppCompatActivity() {
         """.trimIndent()
 
 
-        activityAboutBinding.appNameAndVersion.text = "$appName v$version"
+        activityAboutBinding.appNameAndVersion.text = "$appName v${BuildConfig.VERSION_NAME}${BuildConfig.VERSION_NAME_SUFFIX}"
         activityAboutBinding.forkName.text = forkName
         activityAboutBinding.originalProject.text = attributionText
         activityAboutBinding.thirdPartyLibraries.text = thirdPartyLibraries
