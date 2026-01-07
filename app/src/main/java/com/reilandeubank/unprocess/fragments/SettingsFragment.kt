@@ -1,20 +1,40 @@
-package com.reilandeubank.unprocess
+package com.reilandeubank.unprocess.fragments
 
-import android.content.Intent
+import android.content.Context
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
-import com.reilandeubank.unprocess.databinding.ActivityAboutBinding
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
+import com.reilandeubank.unprocess.databinding.FragmentSettingsBinding
 
-class AboutActivity : AppCompatActivity() {
+class SettingsFragment : Fragment() {
 
-    private lateinit var activityAboutBinding: ActivityAboutBinding
+    private var _binding: FragmentSettingsBinding? = null
+    private val binding get() = _binding!!
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        activityAboutBinding = ActivityAboutBinding.inflate(layoutInflater)
-        setContentView(activityAboutBinding.root)
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        _binding = FragmentSettingsBinding.inflate(inflater, container, false)
+        return binding.root
+    }
 
-        val appName = "JuneProcess"
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        binding.backButton.setOnClickListener {
+            findNavController().popBackStack()
+        }
+
+        val prefs = requireContext().getSharedPreferences("unprocess_prefs", Context.MODE_PRIVATE)
+
+        // About section
         val forkName = "JuneUnprocess"
         val originalProjectLink = "https://github.com/reilandeubank/unprocess"
         val attributionText = """
@@ -86,6 +106,7 @@ class AboutActivity : AppCompatActivity() {
             form, that is based on (or derived from) the Work and for which the
             editorial revisions, annotations, elaborations, or other modifications
             represent, as a whole, an original work of authorship. For the purposes
+
             of this License, Derivative Works shall not include works that remain
             separable from, or merely link (or bind by name) to the interfaces of,
             the Work and Derivative Works thereof.
@@ -149,7 +170,7 @@ class AboutActivity : AppCompatActivity() {
             the Derivative Works; and
 
             (d) If the Work includes a "NOTICE" text file as part of its
-            distribution, then any Derivative Works that you distribute must
+            distribution, then any Derivative Works that You distribute must
             include a readable copy of the attribution notices contained
             within such NOTICE file, excluding those notices that do not
             pertain to any part of the Derivative Works, in at least one
@@ -160,7 +181,7 @@ class AboutActivity : AppCompatActivity() {
             wherever such third-party notices normally appear. The contents
             of the NOTICE file are for informational purposes only and
             do not modify the License. You may add Your own attribution
-            notices within Derivative Works that you distribute, alongside
+            notices within Derivative Works that You distribute, alongside
             or as an addendum to the NOTICE text from the Work, provided
             that such additional attribution notices cannot be construed
             as modifying the License.
@@ -178,6 +199,7 @@ class AboutActivity : AppCompatActivity() {
             this License, without any additional terms or conditions.
             Notwithstanding the above, nothing herein shall supersede or modify
             the terms of any separate license agreement you may have executed
+
             with Licensor regarding such Contributions.
 
             6. Trademarks. This License does not grant permission to use the trade
@@ -221,17 +243,57 @@ class AboutActivity : AppCompatActivity() {
             END OF TERMS AND CONDITIONS
         """.trimIndent()
 
+        binding.appNameAndVersion.text = "JuneProcess v0.2.0 shimmering hours"
+        binding.forkName.text = forkName
+        binding.originalProject.text = attributionText
+        binding.thirdPartyLibraries.text = thirdPartyLibraries
+        binding.licenseInfo.text = licenseText
 
-        activityAboutBinding.appNameAndVersion.text = "JuneProcess v0.2.0 shimmering hours"
-        activityAboutBinding.forkName.text = forkName
-        activityAboutBinding.originalProject.text = attributionText
-        activityAboutBinding.thirdPartyLibraries.text = thirdPartyLibraries
-        activityAboutBinding.licenseInfo.text = licenseText
-
-        activityAboutBinding.galleryButton.setOnClickListener {
-            val intent = Intent(Intent.ACTION_VIEW)
-            intent.type = "image/*"
-            startActivity(intent)
+        // Watermark switch
+        binding.watermarkSwitch.isChecked = prefs.getBoolean("watermark_enabled", false)
+        binding.watermarkSwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("watermark_enabled", isChecked).apply()
         }
+
+        // Format spinner
+        val formats = arrayOf("JPEG", "RAW", "PNG")
+        val formatAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, formats)
+        formatAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.formatSpinner.adapter = formatAdapter
+
+        val preferredFormat = prefs.getString("preferred_format", "JPEG")
+        val formatSelection = formats.indexOf(preferredFormat)
+        binding.formatSpinner.setSelection(formatSelection)
+
+        binding.formatSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
+                prefs.edit().putString("preferred_format", formats[position]).apply()
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        // Aspect Ratio Spinner
+        val aspectRatios = arrayOf("3:4", "9:16")
+        val aspectRatioAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, aspectRatios)
+        aspectRatioAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.aspectRatioSpinner.adapter = aspectRatioAdapter
+
+        val preferredAspectRatio = prefs.getString("preferred_aspect_ratio", "3:4")
+        val aspectRatioSelection = aspectRatios.indexOf(preferredAspectRatio)
+        binding.aspectRatioSpinner.setSelection(aspectRatioSelection)
+
+        binding.aspectRatioSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
+                prefs.edit().putString("preferred_aspect_ratio", aspectRatios[position]).apply()
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 }

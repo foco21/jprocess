@@ -28,7 +28,7 @@ android {
         minSdkVersion 21
         targetSdkVersion 34
         versionCode 1
-        versionName "0.0.9"
+        versionName "0.2.0"
     }
 
     compileOptions {
@@ -45,10 +45,12 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.debug
-            buildConfigField "boolean", "BETA", "false"
+            buildConfigField "boolean", "BETA", "true"
+            buildConfigField "String", "VERSION_NAME_SUFFIX", '" shimmering hours"'
         }
         debug {
-            buildConfigField "boolean", "BETA", "false"
+            buildConfigField "boolean", "BETA", "true"
+            buildConfigField "String", "VERSION_NAME_SUFFIX", '" shimmering hours"'
         }
     }
 
@@ -81,6 +83,7 @@ dependencies {
 
     // App compat and UI things
     implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.13.0'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.6.2'
     implementation "androidx.viewpager2:viewpager2:1.0.0"
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'

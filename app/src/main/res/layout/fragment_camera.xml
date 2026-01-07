@@ -1,20 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  ~ Copyright 2020 The Android Open Source Project
-  ~
-  ~ Licensed under the Apache License, Version 2.0 (the "License");
-  ~ you may not use this file except in compliance with the License.
-  ~ You may obtain a copy of the License at
-  ~
-  ~     https://www.apache.org/licenses/LICENSE-2.0
-  ~
-  ~ Unless required by applicable law or agreed to in writing, software
-  ~ distributed under the License is distributed on an "AS IS" BASIS,
-  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  ~ See the License for the specific language governing permissions and
-  ~ limitations under the License.
-  -->
-<FrameLayout
+<androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -28,97 +13,110 @@
     <View
         android:id="@+id/overlay"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:foreground="@android:color/transparent" />
+        android:layout_height="match_parent" />
 
-    <LinearLayout
+    <TextView
+        android:id="@+id/notification_banner"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_gravity="top|center_horizontal"
-        android:background="#80000000">
-
-        <Spinner
-            android:id="@+id/lens_spinner"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_margin="8dp" />
-
-        <Spinner
-            android:id="@+id/format_spinner"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_margin="8dp" />
-
-        <Switch
-            android:id="@+id/watermark_switch"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Watermark"
-            android:textColor="@android:color/white"
-            android:layout_margin="8dp"/>
-
-        <ImageButton
-            android:id="@+id/about_button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:src="@android:drawable/ic_menu_info_details"
-            android:background="@null" />
-
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/zoom_controls"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="120dp">
-
-        <Button
-            android:id="@+id/zoom_button_1x"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="1x" />
-
-        <Button
-            android:id="@+id/zoom_button_3x"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="3x" />
-
-    </LinearLayout>
+        android:background="?attr/colorPrimary"
+        android:textColor="?attr/colorOnPrimary"
+        android:text="Photo saved"
+        android:padding="16dp"
+        android:gravity="center"
+        android:elevation="4dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <ImageButton
-        android:id="@+id/gallery_button"
-        android:layout_width="72dp"
-        android:layout_height="72dp"
-        android:layout_gravity="bottom|start"
-        android:layout_marginStart="24dp"
-        android:layout_marginBottom="12dp"
-        android:scaleType="fitCenter"
-        android:background="@android:drawable/ic_menu_gallery" />
+        android:id="@+id/settings_button"
+        style="@style/Widget.Material3.Button.IconButton"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
+        android:src="@drawable/ic_settings"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        android:contentDescription="Settings" />
 
     <ImageButton
         android:id="@+id/capture_button"
         android:layout_width="96dp"
         android:layout_height="96dp"
-        android:layout_gravity="bottom|center"
-        android:scaleType="fitCenter"
+        android:layout_marginBottom="32dp"
         android:background="@drawable/ic_shutter"
-        android:contentDescription="@string/capture" />
+        android:contentDescription="Capture"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
 
-    <ImageButton
-        android:id="@+id/switch_camera_button"
-        android:layout_width="72dp"
-        android:layout_height="72dp"
-        android:layout_gravity="bottom|end"
-        android:layout_marginEnd="24dp"
-        android:layout_marginBottom="12dp"
-        android:scaleType="fitCenter"
-        android:background="@android:drawable/ic_menu_camera" />
+    <FrameLayout
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_marginStart="24dp"
+        android:layout_marginBottom="48dp"
+        android:background="@drawable/scrim_circle_background"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
 
-</FrameLayout>
+        <ImageButton
+            android:id="@+id/gallery_button"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_photo"
+            android:contentDescription="Gallery" />
+
+    </FrameLayout>
+
+    <HorizontalScrollView
+        android:id="@+id/lens_scroll_view"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none"
+        android:layout_marginBottom="16dp"
+        app:layout_constraintBottom_toTopOf="@id/capture_button"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/lens_chip_group"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            app:singleSelection="true"
+            app:selectionRequired="true"/>
+
+    </HorizontalScrollView>
+
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/zoom_toggle_group"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        app:layout_constraintBottom_toTopOf="@id/lens_scroll_view"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:singleSelection="true"
+        app:selectionRequired="true">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/zoom_1x"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="18sp"
+            android:text="1x" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/zoom_2x"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="18sp"
+            android:text="2x" />
+
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
