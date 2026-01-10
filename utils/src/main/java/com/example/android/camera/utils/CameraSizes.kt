@@ -46,22 +46,17 @@ fun getDisplaySmartSize(display: Display): SmartSize {
 /**
  * Returns the largest available PREVIEW size that matches the given aspect ratio.
  */
-fun <T>getPreviewOutputSize(
-        display: Display,
-        characteristics: CameraCharacteristics,
-        targetClass: Class<T>,
-        format: Int? = null,
-        aspectRatio: Float? = null
+fun <T> getPreviewOutputSize(
+    display: Display,
+    characteristics: CameraCharacteristics,
+    targetClass: Class<T>,
+    format: Int? = null,
+    aspectRatio: Float? = null
 ): Size {
-
-    // Find which is smaller: screen or 1080p
-    val screenSize = getDisplaySmartSize(display)
-    val hdScreen = screenSize.long >= SIZE_1080P.long || screenSize.short >= SIZE_1080P.short
-    val maxSize = if (hdScreen) SIZE_1080P else screenSize
-
     // If image format is provided, use it to determine supported sizes; else use target class
     val config = characteristics.get(
-            CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
+        CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP
+    )!!
     if (format == null)
         assert(StreamConfigurationMap.isOutputSupportedFor(targetClass))
     else
@@ -71,8 +66,8 @@ fun <T>getPreviewOutputSize(
 
     // Get available sizes and sort them by area from largest to smallest
     var validSizes = allSizes
-            .sortedWith(compareBy { it.height * it.width })
-            .map { SmartSize(it.width, it.height) }.reversed()
+        .sortedWith(compareBy { it.height * it.width })
+        .map { SmartSize(it.width, it.height) }.reversed()
 
     // Filter by aspect ratio if provided
     if (aspectRatio != null) {
@@ -84,6 +79,6 @@ fun <T>getPreviewOutputSize(
         }
     }
 
-    // Then, get the largest output size that is smaller or equal than our max size
-    return validSizes.first { it.long <= maxSize.long && it.short <= maxSize.short }.size
+    // Return the largest valid size
+    return validSizes.first().size
 }
