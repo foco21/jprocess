@@ -224,7 +224,7 @@ class SettingsFragment : Fragment() {
             liable to You for damages, including any direct, indirect, special,
             incidental, or consequential damages of any character arising as a
             result of this License or out of the use or inability to use the
-            Work (including but not limited to damages for loss of goodwill,
+            Work (including but not to limited to damages for loss of goodwill,
             work stoppage, computer failure or malfunction, or any and all
             other commercial damages or losses), even if such Contributor
             has been advised of the possibility of such damages.
@@ -243,7 +243,7 @@ class SettingsFragment : Fragment() {
             END OF TERMS AND CONDITIONS
         """.trimIndent()
 
-        binding.appNameAndVersion.text = "JuneProcess v0.2.0 shimmering hours"
+        binding.appNameAndVersion.text = "JuneProcess v0.2.1 settling light"
         binding.forkName.text = forkName
         binding.originalProject.text = attributionText
         binding.thirdPartyLibraries.text = thirdPartyLibraries
@@ -256,18 +256,23 @@ class SettingsFragment : Fragment() {
         }
 
         // Format spinner
-        val formats = arrayOf("JPEG", "RAW", "PNG")
-        val formatAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, formats)
+        val supportedFormats = prefs.getStringSet("supported_formats", setOf("JPEG"))?.toTypedArray() ?: arrayOf("JPEG")
+        val formatAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, supportedFormats)
         formatAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         binding.formatSpinner.adapter = formatAdapter
 
         val preferredFormat = prefs.getString("preferred_format", "JPEG")
-        val formatSelection = formats.indexOf(preferredFormat)
-        binding.formatSpinner.setSelection(formatSelection)
+        val formatSelection = supportedFormats.indexOf(preferredFormat)
+        if (formatSelection != -1) {
+            binding.formatSpinner.setSelection(formatSelection)
+        } else {
+            binding.formatSpinner.setSelection(0)
+            prefs.edit().putString("preferred_format", supportedFormats[0]).apply()
+        }
 
         binding.formatSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
-                prefs.edit().putString("preferred_format", formats[position]).apply()
+                prefs.edit().putString("preferred_format", supportedFormats[position]).apply()
             }
 
             override fun onNothingSelected(parent: AdapterView<*>?) {}
