@@ -30,6 +30,7 @@ class AboutActivity : AppCompatActivity() {
         val thirdPartyLibraries = """
             - androidx.core:core-ktx:1.12.0
             - androidx.appcompat:appcompat:1.6.1
+            - com.google.android.material:material:1.13.0
             - androidx.lifecycle:lifecycle-runtime-ktx:2.6.2
             - androidx.viewpager2:viewpager2:1.0.0
             - androidx.constraintlayout:constraintlayout:2.1.4
@@ -39,7 +40,7 @@ class AboutActivity : AppCompatActivity() {
             - com.github.bumptech.glide:glide:4.16.0
             - org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3
             - androidx.databinding:viewbinding:8.7.2
-            - org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.5.21
+            - org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.22
         """.trimIndent()
 
         val licenseText = """
@@ -148,7 +149,7 @@ class AboutActivity : AppCompatActivity() {
             excluding those notices that do not pertain to any part of
             the Derivative Works; and
 
-            (d) If the Work includes a "NOTICE" text file as part of its
+d) If the Work includes a "NOTICE" text file as part of its
             distribution, then any Derivative Works that you distribute must
             include a readable copy of the attribution notices contained
             within such NOTICE file, excluding those notices that do not
