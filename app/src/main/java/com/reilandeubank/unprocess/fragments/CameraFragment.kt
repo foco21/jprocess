@@ -123,6 +123,7 @@ class CameraFragment : Fragment() {
         val name: String,
         val cameraId: String,
         val supportedFormats: List<String>,
+        val hasRawSupport: Boolean,
         val isLogicalCamera: Boolean,
         val physicalCameraIds: Set<String> = emptySet()
     )
@@ -260,6 +261,18 @@ class CameraFragment : Fragment() {
                 }
             }
         })
+
+        val rawUnsupportedDialogShown = prefs.getBoolean("raw_unsupported_dialog_shown", false)
+        if (!availableLenses.any { it.hasRawSupport } && !rawUnsupportedDialogShown) {
+            AlertDialog.Builder(requireContext())
+                .setTitle("Compatibility Notice")
+                .setMessage("Not all features are available for your device. RAW capture is not supported.")
+                .setPositiveButton("OK") { dialog, _ ->
+                    dialog.dismiss()
+                    prefs.edit().putBoolean("raw_unsupported_dialog_shown", true).apply()
+                }
+                .show()
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -298,8 +311,9 @@ class CameraFragment : Fragment() {
             val capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)!!
             val outputFormats = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!.outputFormats
 
+            val hasRawSupport = capabilities.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW)
             val supportedFormats = mutableListOf<String>()
-            if (outputFormats.contains(ImageFormat.RAW_SENSOR)) {
+            if (hasRawSupport && outputFormats.contains(ImageFormat.RAW_SENSOR)) {
                 supportedFormats.add("RAW")
                 supportedFormats.add("PNG") // PNG is derived from RAW
             }
@@ -332,7 +346,7 @@ class CameraFragment : Fragment() {
 
                 val physicalCameraIds = if (isLogical) characteristics.physicalCameraIds else emptySet()
 
-                cameraInfoList.add(CameraInfo(lensName, id, supportedFormats.distinct(), isLogical, physicalCameraIds))
+                cameraInfoList.add(CameraInfo(lensName, id, supportedFormats.distinct(), hasRawSupport, isLogical, physicalCameraIds))
             }
         }
 
@@ -362,6 +376,11 @@ class CameraFragment : Fragment() {
                 return@launch
             }
         }
+
+        if (selectedLens?.hasRawSupport == false && (selectedFormat == "RAW" || selectedFormat == "PNG")) {
+            selectedFormat = "JPEG"
+        }
+
         val cameraId = selectedLens!!.cameraId
         characteristics = cameraManager.getCameraCharacteristics(cameraId)
 
