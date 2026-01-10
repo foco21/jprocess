@@ -53,6 +53,7 @@ import com.reilandeubank.unprocess.R
 import com.reilandeubank.unprocess.databinding.FragmentCameraBinding
 import com.reilandeubank.unprocess.utils.OrientationLiveData
 import com.reilandeubank.unprocess.utils.computeExifOrientation
+import com.reilandeubank.unprocess.utils.convertYUV420888toRGB
 import com.reilandeubank.unprocess.utils.decodeExifOrientation
 import com.reilandeubank.unprocess.utils.getPreviewOutputSize
 import kotlinx.coroutines.Dispatchers
@@ -124,6 +125,7 @@ class CameraFragment : Fragment() {
         val cameraId: String,
         val supportedFormats: List<String>,
         val hasRawSupport: Boolean,
+        val hasYuvSupport: Boolean,
         val isLogicalCamera: Boolean,
         val physicalCameraIds: Set<String> = emptySet()
     )
@@ -258,26 +260,30 @@ class CameraFragment : Fragment() {
                 lifecycleScope.launch(Dispatchers.Main) {
                     setupUI()
                     initializeCamera()
+
+                    val rawUnsupportedDialogShown = prefs.getBoolean("raw_unsupported_dialog_shown", false)
+                    if (!availableLenses.any { it.hasRawSupport } && !rawUnsupportedDialogShown) {
+                        AlertDialog.Builder(requireContext())
+                            .setTitle("Compatibility Notice")
+                            .setMessage("Not all features are available for your device. RAW capture is not supported.")
+                            .setPositiveButton("OK") { dialog, _ ->
+                                dialog.dismiss()
+                                prefs.edit().putBoolean("raw_unsupported_dialog_shown", true).apply()
+                            }
+                            .show()
+                    }
                 }
             }
         })
-
-        val rawUnsupportedDialogShown = prefs.getBoolean("raw_unsupported_dialog_shown", false)
-        if (!availableLenses.any { it.hasRawSupport } && !rawUnsupportedDialogShown) {
-            AlertDialog.Builder(requireContext())
-                .setTitle("Compatibility Notice")
-                .setMessage("Not all features are available for your device. RAW capture is not supported.")
-                .setPositiveButton("OK") { dialog, _ ->
-                    dialog.dismiss()
-                    prefs.edit().putBoolean("raw_unsupported_dialog_shown", true).apply()
-                }
-                .show()
-        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupUI() {
         availableLenses = enumerateCameras(cameraManager)
+
+        val allSupportedFormats = availableLenses.flatMap { it.supportedFormats }.toSet()
+        val prefs = requireContext().getSharedPreferences("unprocess_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putStringSet("supported_formats", allSupportedFormats).apply()
 
         _fragmentCameraBinding?.lensChipGroup?.removeAllViews()
         availableLenses.forEach { lens ->
@@ -312,10 +318,13 @@ class CameraFragment : Fragment() {
             val outputFormats = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!.outputFormats
 
             val hasRawSupport = capabilities.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW)
+            val hasYuvSupport = outputFormats.contains(ImageFormat.YUV_420_888)
             val supportedFormats = mutableListOf<String>()
             if (hasRawSupport && outputFormats.contains(ImageFormat.RAW_SENSOR)) {
                 supportedFormats.add("RAW")
-                supportedFormats.add("PNG") // PNG is derived from RAW
+            }
+            if (hasYuvSupport) {
+                supportedFormats.add("PNG")
             }
             if (outputFormats.contains(ImageFormat.JPEG)) {
                 supportedFormats.add("JPEG")
@@ -346,7 +355,7 @@ class CameraFragment : Fragment() {
 
                 val physicalCameraIds = if (isLogical) characteristics.physicalCameraIds else emptySet()
 
-                cameraInfoList.add(CameraInfo(lensName, id, supportedFormats.distinct(), hasRawSupport, isLogical, physicalCameraIds))
+                cameraInfoList.add(CameraInfo(lensName, id, supportedFormats.distinct(), hasRawSupport, hasYuvSupport, isLogical, physicalCameraIds))
             }
         }
 
@@ -377,7 +386,10 @@ class CameraFragment : Fragment() {
             }
         }
 
-        if (selectedLens?.hasRawSupport == false && (selectedFormat == "RAW" || selectedFormat == "PNG")) {
+        if (selectedLens?.hasRawSupport == false && selectedFormat == "RAW") {
+            selectedFormat = "JPEG"
+        }
+        if (selectedLens?.hasYuvSupport == false && selectedFormat == "PNG") {
             selectedFormat = "JPEG"
         }
 
@@ -450,7 +462,8 @@ class CameraFragment : Fragment() {
         }
 
         val pixelFormat = when (selectedFormat) {
-            "RAW", "PNG" -> ImageFormat.RAW_SENSOR
+            "RAW" -> ImageFormat.RAW_SENSOR
+            "PNG" -> if (selectedLens?.hasRawSupport == true) ImageFormat.RAW_SENSOR else ImageFormat.YUV_420_888
             "JPEG" -> ImageFormat.JPEG
             else -> {
                 // Default to JPEG if no format is selected
@@ -736,6 +749,9 @@ class CameraFragment : Fragment() {
                     bitmap = BitmapFactory.decodeFile(tempDngFile.absolutePath)
                     tempDngFile.delete()
                 }
+            }
+            ImageFormat.YUV_420_888 -> {
+                bitmap = convertYUV420888toRGB(result.image)
             }
             ImageFormat.JPEG -> {
                 val buffer = result.image.planes[0].buffer
