@@ -207,7 +207,7 @@ class AboutActivity : AppCompatActivity() {
             other commercial damages or losses), even if such Contributor
             has been advised of the possibility of such damages.
 
-            9. Accepting Warranty or Additional Liability. While redistributing
+            9. Accepting Warranty or additional Liability. While redistributing
             the Work or Derivative Works thereof, You may choose to offer,
             and charge a fee for, acceptance of support, warranty, indemnity,
             or other liability obligations and/or rights consistent with this
@@ -222,7 +222,7 @@ class AboutActivity : AppCompatActivity() {
         """.trimIndent()
 
 
-        activityAboutBinding.appNameAndVersion.text = "JuneProcess v0.2.0 shimmering hours"
+        activityAboutBinding.appNameAndVersion.text = "JuneProcess v0.2.1 settling light"
         activityAboutBinding.forkName.text = forkName
         activityAboutBinding.originalProject.text = attributionText
         activityAboutBinding.thirdPartyLibraries.text = thirdPartyLibraries
