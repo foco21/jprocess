@@ -26,8 +26,9 @@ Pre-requisites
 Screenshots
 -------------
 
-None at the moment
+![Camera UI](https://raw.githubusercontent.com/foco21/jprocess/main/Screenshot_20260111_154312_JuneProcess.png)
 
+![Settings UI](https://raw.githubusercontent.com/foco21/jprocess/main/Screenshot_20260111_154329_JuneProcess.png)
 Getting Started
 ---------------
 
