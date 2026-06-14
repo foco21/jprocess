@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <!-- Camera viewfinder -->
+    <com.reilandeubank.unprocess.utils.AutoFitSurfaceView
+        android:id="@+id/view_finder"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Rule-of-thirds grid overlay -->
+    <com.reilandeubank.unprocess.GridOverlayView
+        android:id="@+id/grid_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <!-- Capture flash overlay -->
+    <View
+        android:id="@+id/overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <!-- Top gradient scrim for UI element visibility -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="140dp"
+        android:background="@drawable/camera_top_scrim"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Bottom gradient scrim for controls -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="260dp"
+        android:background="@drawable/camera_bottom_scrim"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Settings button — top left -->
+    <ImageButton
+        android:id="@+id/settings_button"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="48dp"
+        android:src="@drawable/ic_settings"
+        android:background="@drawable/scrim_circle_background"
+        android:padding="10dp"
+        android:contentDescription="Settings"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Timer button — top center -->
+    <ImageButton
+        android:id="@+id/timer_button"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_marginTop="48dp"
+        android:src="@drawable/ic_timer"
+        android:background="@drawable/scrim_circle_background"
+        android:padding="10dp"
+        android:alpha="0.5"
+        android:contentDescription="Self-timer"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Timer mode label — below timer button -->
+    <TextView
+        android:id="@+id/timer_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textColor="#FFFFFF"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/timer_button"
+        app:layout_constraintStart_toStartOf="@id/timer_button"
+        app:layout_constraintEnd_toEndOf="@id/timer_button" />
+
+
+<!-- Countdown text — center screen, shown during self-timer -->
+    <TextView
+        android:id="@+id/countdown_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="#FFFFFF"
+        android:textSize="120sp"
+        android:textStyle="bold"
+        android:shadowColor="#80000000"
+        android:shadowDx="0"
+        android:shadowDy="2"
+        android:shadowRadius="8"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Focus ring — repositioned in code on tap -->
+    <View
+        android:id="@+id/focus_ring"
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:background="@drawable/focus_ring"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <!-- Photo saved notification — top center floating badge -->
+    <TextView
+        android:id="@+id/notification_banner"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/notification_badge"
+        android:textColor="?attr/colorOnSecondaryContainer"
+        android:text="Photo saved"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
+        android:textSize="14sp"
+        android:letterSpacing="0.01"
+        android:elevation="8dp"
+        android:visibility="gone"
+        android:layout_marginTop="56dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Lens selector chips — above zoom buttons -->
+    <HorizontalScrollView
+        android:id="@+id/lens_scroll_view"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none"
+        android:layout_marginBottom="8dp"
+        app:layout_constraintBottom_toTopOf="@id/zoom_toggle_group"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/lens_chip_group"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            app:singleSelection="true"
+            app:selectionRequired="true" />
+
+    </HorizontalScrollView>
+
+    <!-- Zoom toggle buttons — above capture button -->
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/zoom_toggle_group"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="20dp"
+        app:layout_constraintBottom_toTopOf="@id/capture_button"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:singleSelection="true"
+        app:selectionRequired="true">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/zoom_1x"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="60dp"
+            android:textSize="15sp"
+            android:text="1x" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/zoom_2x"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="60dp"
+            android:textSize="15sp"
+            android:text="2x" />
+
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+    <!-- Gallery thumbnail — bottom left, vertically centered with shutter -->
+    <ImageButton
+        android:id="@+id/gallery_button"
+        android:layout_width="54dp"
+        android:layout_height="54dp"
+        android:layout_marginStart="36dp"
+        android:layout_marginBottom="55dp"
+        android:background="@drawable/gallery_thumb_background"
+        android:src="@drawable/ic_photo"
+        android:tint="#FFFFFF"
+        android:padding="12dp"
+        android:scaleType="centerCrop"
+        android:contentDescription="Gallery"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <!-- Shutter / Capture button — bottom center -->
+    <ImageButton
+        android:id="@+id/capture_button"
+        android:layout_width="84dp"
+        android:layout_height="84dp"
+        android:layout_marginBottom="40dp"
+        android:background="@drawable/ic_shutter"
+        android:contentDescription="Capture"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

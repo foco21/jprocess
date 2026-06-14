@@ -1,0 +1,27 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+android {
+    namespace = "com.reilandeubank.unprocess.glyph"
+    compileSdkVersion 34
+
+    defaultConfig {
+        minSdkVersion 21
+        targetSdkVersion 34
+    }
+
+    compileOptions {
+        sourceCompatibility rootProject.ext.java_version
+        targetCompatibility rootProject.ext.java_version
+    }
+
+    kotlinOptions {
+        jvmTarget = "$rootProject.ext.java_version"
+    }
+}
+
+dependencies {
+    // Compile against the Glyph SDK but don't bundle it — the :app module provides it at runtime
+    compileOnly(name: 'glyph-matrix-sdk-2.0', ext: 'aar')
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
+}

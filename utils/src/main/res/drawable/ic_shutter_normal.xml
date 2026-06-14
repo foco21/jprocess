@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Outer ring uses Material You primary color -->
+    <item>
+        <shape android:shape="oval">
+            <stroke android:width="3dp" android:color="?attr/colorPrimary"/>
+            <solid android:color="@android:color/transparent"/>
+        </shape>
+    </item>
+    <!-- Inner fill uses Material You primaryContainer color -->
+    <item
+        android:left="9dp"
+        android:right="9dp"
+        android:top="9dp"
+        android:bottom="9dp">
+        <shape android:shape="oval">
+            <solid android:color="?attr/colorPrimaryContainer"/>
+        </shape>
+    </item>
+</layer-list>

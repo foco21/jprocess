@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Nothing GlyphMatrix SDK — no-op on non-Nothing devices -->
+    <uses-permission android:name="com.nothing.ketchum.permission.ENABLE"
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- Allow SDK's minSdk 33 on older devices — all Glyph calls are try-catch guarded -->
+    <uses-sdk tools:overrideLibrary="com.nothing.thirdparty" />
+
+</manifest>
