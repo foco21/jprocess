@@ -8,6 +8,9 @@ local.properties
 # Log/OS Files
 *.log
 
+# Captured device diagnostics (logcat streams + panic forensics — contain device-specific data)
+logs/
+
 # Android Studio generated files and folders
 captures/
 .externalNativeBuild/

@@ -243,7 +243,7 @@ class SettingsFragment : Fragment() {
             END OF TERMS AND CONDITIONS
         """.trimIndent()
 
-        binding.appNameAndVersion.text = "JuneProcess v0.2.3 quantum"
+        binding.appNameAndVersion.text = "JuneProcess v0.2.4 skyfall"
         binding.forkName.text = forkName
         binding.originalProject.text = attributionText
         binding.thirdPartyLibraries.text = thirdPartyLibraries
@@ -285,24 +285,6 @@ class SettingsFragment : Fragment() {
         binding.formatSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
                 prefs.edit().putString("preferred_format", supportedFormats[position]).apply()
-            }
-
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
-        }
-
-        // Aspect Ratio Spinner
-        val aspectRatios = arrayOf("3:4", "9:16")
-        val aspectRatioAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, aspectRatios)
-        aspectRatioAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        binding.aspectRatioSpinner.adapter = aspectRatioAdapter
-
-        val preferredAspectRatio = prefs.getString("preferred_aspect_ratio", "9:16")
-        val aspectRatioSelection = aspectRatios.indexOf(preferredAspectRatio)
-        binding.aspectRatioSpinner.setSelection(aspectRatioSelection)
-
-        binding.aspectRatioSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
-                prefs.edit().putString("preferred_aspect_ratio", aspectRatios[position]).apply()
             }
 
             override fun onNothingSelected(parent: AdapterView<*>?) {}

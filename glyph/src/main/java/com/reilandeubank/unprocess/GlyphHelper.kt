@@ -52,13 +52,13 @@ class GlyphHelper(private val context: Context) {
         try {
             handler.removeCallbacksAndMessages(null)
 
-            at(0)   { irisFrame(open = 0.75f, rot = 0f,   br = 170) }
-            at(60)  { irisFrame(open = 0.52f, rot = 18f,  br = 200) }
-            at(120) { irisFrame(open = 0.28f, rot = 36f,  br = 235) }
-            at(175) { irisFrame(open = 0.08f, rot = 54f,  br = 255) }
-            at(220) { irisFrame(open = 0.00f, rot = 72f,  br = 255) }
-            at(310) { irisFrame(open = 0.30f, rot = 88f,  br = 210) }
-            at(360) { irisFrame(open = 0.62f, rot = 106f, br = 140) }
+            at(0)   { irisFrame(open = 0.75f, rot = 0f,   br = 100) }
+            at(60)  { irisFrame(open = 0.52f, rot = 18f,  br = 120) }
+            at(120) { irisFrame(open = 0.28f, rot = 36f,  br = 145) }
+            at(175) { irisFrame(open = 0.08f, rot = 54f,  br = 160) }
+            at(220) { irisFrame(open = 0.00f, rot = 72f,  br = 160) }
+            at(310) { irisFrame(open = 0.30f, rot = 88f,  br = 130) }
+            at(360) { irisFrame(open = 0.62f, rot = 106f, br = 85)  }
             at(410) { quietOff() }
         } catch (e: Exception) {
             Log.w(TAG, "captureShutter: ${e.message}")
@@ -71,9 +71,9 @@ class GlyphHelper(private val context: Context) {
             handler.removeCallbacksAndMessages(null)
             val bmp = drawDigitBitmap(secondsLeft)
             val frame = GlyphMatrixFrame.Builder()
-                .addTop(makeObj(bmp, 220))
-                .addMid(makeObj(bmp, 220))
-                .addLow(makeObj(bmp, 220))
+                .addTop(makeObj(bmp, 120))
+                .addMid(makeObj(bmp, 120))
+                .addLow(makeObj(bmp, 120))
                 .build(context)
             manager?.setMatrixFrame(frame.render())
             at(900) { quietOff() }

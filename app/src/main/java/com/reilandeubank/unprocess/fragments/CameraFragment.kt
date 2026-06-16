@@ -32,6 +32,7 @@ import android.os.HandlerThread
 import android.content.ContentUris
 import android.provider.MediaStore
 import android.util.Log
+import android.util.Size
 import com.bumptech.glide.Glide
 import kotlinx.coroutines.withContext
 import android.util.TypedValue
@@ -157,6 +158,13 @@ class CameraFragment : Fragment() {
     private var timerSeconds = 0
     private var countdownJob: Job? = null
 
+    // PRO mode control state (active only when RAW format is selected)
+    private var proIsoIndex = 0      // 0 = AUTO
+    private var proShutterIndex = 0  // 0 = AUTO
+    private var proWbIndex = 0       // 0 = AUTO
+    private var proEvIndex = 4       // index 4 = 0 EV
+    private var proFocusIndex = 0    // 0 = AUTO (AF)
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -179,10 +187,13 @@ class CameraFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        // Make sure that all permissions are still present, since the
-        // user could have removed them while the app was in paused state.
         if (!PermissionsFragment.hasPermissions(requireContext())) {
             navController.navigate(CameraFragmentDirections.actionCameraToPermissions())
+        } else {
+            val prefs = requireContext().getSharedPreferences("unprocess_prefs", Context.MODE_PRIVATE)
+            val fmt = prefs.getString("preferred_format", "JPEG")
+            _fragmentCameraBinding?.proControlsScroll?.visibility =
+                if (fmt == "RAW") View.VISIBLE else View.GONE
         }
     }
 
@@ -276,6 +287,35 @@ class CameraFragment : Fragment() {
                 else -> 0
             }
             updateTimerLabel()
+        }
+
+        // PRO mode control tiles
+        fragmentCameraBinding.proIso?.setOnClickListener {
+            proIsoIndex = (proIsoIndex + 1) % ISO_VALUES.size
+            fragmentCameraBinding.proIsoValue?.text = ISO_VALUES[proIsoIndex]
+            updateEvAvailability()
+            applyPreviewSettings()
+        }
+        fragmentCameraBinding.proShutter?.setOnClickListener {
+            proShutterIndex = (proShutterIndex + 1) % SHUTTER_VALUES.size
+            fragmentCameraBinding.proShutterValue?.text = SHUTTER_VALUES[proShutterIndex]
+            updateEvAvailability()
+            applyPreviewSettings()
+        }
+        fragmentCameraBinding.proWb?.setOnClickListener {
+            proWbIndex = (proWbIndex + 1) % WB_LABELS.size
+            fragmentCameraBinding.proWbValue?.text = WB_LABELS[proWbIndex]
+            applyPreviewSettings()
+        }
+        fragmentCameraBinding.proEv?.setOnClickListener {
+            proEvIndex = (proEvIndex + 1) % EV_VALUES.size
+            fragmentCameraBinding.proEvValue?.text = EV_VALUES[proEvIndex]
+            applyPreviewSettings()
+        }
+        fragmentCameraBinding.proFocus?.setOnClickListener {
+            proFocusIndex = (proFocusIndex + 1) % FOCUS_LABELS.size
+            fragmentCameraBinding.proFocusValue?.text = FOCUS_LABELS[proFocusIndex]
+            applyPreviewSettings()
         }
 
         fragmentCameraBinding.zoomToggleGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
@@ -428,14 +468,7 @@ class CameraFragment : Fragment() {
         isGridEnabled = prefs.getBoolean("grid_enabled", false)
         fragmentCameraBinding.gridOverlay?.visibility = if (isGridEnabled) View.VISIBLE else View.GONE
         selectedFormat = prefs.getString("preferred_format", "JPEG")
-        preferredAspectRatio = prefs.getString("preferred_aspect_ratio", "9:16")
-        val aspectRatio = when (preferredAspectRatio) {
-            "3:4" -> 4f / 3f
-            "9:16" -> 16f / 9f
-            "1:1" -> 1f
-            else -> null
-        }
-
+        preferredAspectRatio = "3:4"   // 9:16 was a lossy crop and was removed; always native 3:4
 
         if (selectedLens == null) {
             if (availableLenses.isNotEmpty()) {
@@ -455,6 +488,8 @@ class CameraFragment : Fragment() {
         if (selectedLens?.supportedFormats?.contains("HEIC") != true && selectedFormat == "HEIC") {
             selectedFormat = "JPEG"
         }
+
+        val aspectRatio: Float? = 4f / 3f   // sensor-native 3:4 for every format
 
         val cameraId = selectedLens!!.cameraId
         characteristics = cameraManager.getCameraCharacteristics(cameraId)
@@ -551,14 +586,24 @@ class CameraFragment : Fragment() {
             outputSizes.maxByOrNull { it.height * it.width }
         } ?: outputSizes.maxByOrNull { it.height * it.width }!!
 
-        imageReader = ImageReader.newInstance(size.width, size.height, pixelFormat, IMAGE_BUFFER_SIZE)
+        // RAW frames are huge (~100 MB each at full res). Allocating 3 buffers of contiguous
+        // DMA memory can OOM/panic a thin HAL, so use the minimum viable count for RAW.
+        val bufferCount = if (pixelFormat == ImageFormat.RAW_SENSOR) RAW_BUFFER_SIZE else IMAGE_BUFFER_SIZE
+        Log.i(CRUMB, "initCamera: ImageReader ${size.width}x${size.height} fmt=$pixelFormat buffers=$bufferCount")
+        imageReader = ImageReader.newInstance(size.width, size.height, pixelFormat, bufferCount)
 
         val targets = listOf(fragmentCameraBinding.viewFinder.holder.surface, imageReader.surface)
 
+        Log.i(CRUMB, "initCamera: creating capture session (preview + ${selectedFormat} stream)")
         session = createCaptureSession(camera, targets, cameraHandler)
+        Log.i(CRUMB, "initCamera: session configured OK")
 
         currentAfRegions = null
         currentAeRegions = null
+
+        fragmentCameraBinding.proControlsScroll?.visibility =
+            if (selectedFormat == "RAW") View.VISIBLE else View.GONE
+
         setZoom(1.0f)
         setupTouchGestures()
 
@@ -577,6 +622,7 @@ class CameraFragment : Fragment() {
     }
 
     private fun triggerCapture(onDone: () -> Unit) {
+        Log.i(CRUMB, "==== SHUTTER PRESSED ==== format=$selectedFormat lens=${selectedLens?.name} zoom=$currentZoom")
         if (isGlyphEnabled) glyphHelper?.captureShutter()
         lifecycleScope.launch(Dispatchers.Main) {
             val typedValue = TypedValue()
@@ -665,6 +711,98 @@ class CameraFragment : Fragment() {
         }
     }
 
+    private fun updateEvAvailability() {
+        val aeIsAuto = proIsoIndex == 0 && proShutterIndex == 0
+        fragmentCameraBinding.proEv?.alpha = if (aeIsAuto) 1f else 0.35f
+        fragmentCameraBinding.proEv?.isClickable = aeIsAuto
+        fragmentCameraBinding.proEv?.isFocusable = aeIsAuto
+    }
+
+    private fun evSteps(): Int {
+        if (!::characteristics.isInitialized) return 0
+        val ev = EV_FLOATS[proEvIndex]
+        val step = characteristics.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP) ?: return 0
+        val stepSize = step.numerator.toFloat() / step.denominator.toFloat()
+        if (stepSize == 0f) return 0
+        val range = characteristics.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE)
+        val steps = (ev / stepSize).roundToInt()
+        return if (range != null) steps.coerceIn(range.lower, range.upper) else steps
+    }
+
+    private fun applyProControls(builder: CaptureRequest.Builder, isCapture: Boolean = false) {
+        if (selectedFormat != "RAW") return
+        val manualIso = proIsoIndex > 0
+        val manualShutter = proShutterIndex > 0
+        // proEvIndex 4 == EV 0. "All auto" means the user overrode nothing.
+        val allAuto = proIsoIndex == 0 && proShutterIndex == 0 && proWbIndex == 0 &&
+                proEvIndex == 4 && proFocusIndex == 0
+        Log.i(CRUMB, "applyProControls: isCapture=$isCapture allAuto=$allAuto iso=${ISO_VALUES[proIsoIndex]} shutter=${SHUTTER_VALUES[proShutterIndex]} wb=${WB_LABELS[proWbIndex]} ev=${EV_VALUES[proEvIndex]} focus=${FOCUS_LABELS[proFocusIndex]}")
+        // When nothing is overridden, send NO overrides at all — an identical request to
+        // PNG/JPEG, which capture the same RAW_SENSOR frame and do NOT panic this HAL.
+        // Explicitly setting even default-valued keys (AE_MODE_ON/EV0/AWB_AUTO) is the only
+        // thing that differs between auto-RAW (crashes) and PNG (works) on the Nothing HAL.
+        if (allAuto) return
+
+        if (isCapture && (manualIso || manualShutter)) {
+            val capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: intArrayOf()
+            val supportsManualSensor = CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR in capabilities
+            val availableAeModes = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_MODES)
+                ?: intArrayOf(CameraMetadata.CONTROL_AE_MODE_ON)
+            val canUseManualAe = supportsManualSensor && CameraMetadata.CONTROL_AE_MODE_OFF in availableAeModes
+
+            if (canUseManualAe) {
+                builder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF)
+                val isoRange = characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
+                val iso = (if (manualIso) ISO_VALUES[proIsoIndex].toInt() else 400)
+                    .let { if (isoRange != null) it.coerceIn(isoRange.lower, isoRange.upper) else it }
+                builder.set(CaptureRequest.SENSOR_SENSITIVITY, iso)
+                val shutterRange = characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
+                val nanos = (if (manualShutter) SHUTTER_NANOS[proShutterIndex] else 16_666_667L)
+                    .let { if (shutterRange != null) it.coerceIn(shutterRange.lower, shutterRange.upper) else it }
+                builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, nanos)
+                // Frame duration must sit within [stream-min, sensor-max] AND be >= exposure.
+                // Below the stream minimum is a malformed request (strict HALs reject it,
+                // thin HALs panic); below the exposure starves a thin HAL on long exposures.
+                val maxFrameDuration = characteristics.get(CameraCharacteristics.SENSOR_INFO_MAX_FRAME_DURATION) ?: nanos
+                val minFrameDuration = if (::imageReader.isInitialized) {
+                    characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                        ?.getOutputMinFrameDuration(imageReader.imageFormat, Size(imageReader.width, imageReader.height)) ?: 0L
+                } else 0L
+                val frameDuration = nanos.coerceAtLeast(minFrameDuration).coerceAtMost(maxFrameDuration)
+                builder.set(CaptureRequest.SENSOR_FRAME_DURATION, frameDuration)
+                Log.i(CRUMB, "applyProControls: MANUAL AE -> iso=$iso exposureNs=$nanos frameDurNs=$frameDuration (minFrameDur=$minFrameDuration maxFrameDur=$maxFrameDuration)")
+            } else {
+                builder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON)
+                builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, evSteps())
+            }
+        } else {
+            builder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON)
+            builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, evSteps())
+        }
+
+        // Only set WB mode if the device actually supports it
+        val availableAwbModes = characteristics.get(CameraCharacteristics.CONTROL_AWB_AVAILABLE_MODES)
+            ?: intArrayOf(CameraMetadata.CONTROL_AWB_MODE_AUTO)
+        val requestedAwb = WB_MODES[proWbIndex]
+        builder.set(
+            CaptureRequest.CONTROL_AWB_MODE,
+            if (requestedAwb in availableAwbModes) requestedAwb else CameraMetadata.CONTROL_AWB_MODE_AUTO
+        )
+
+        // Only set manual focus if the device supports AF_MODE_OFF AND has a calibrated
+        // focuser (minFocusDist > 0). A fixed-focus lens reports 0 and rejects manual focus.
+        if (proFocusIndex > 0) {
+            val availableAfModes = characteristics.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)
+                ?: intArrayOf()
+            val minFocusDist = characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
+            if (CameraMetadata.CONTROL_AF_MODE_OFF in availableAfModes && minFocusDist > 0f) {
+                builder.set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_OFF)
+                // Clamp focus distance to sensor's valid range [0=infinity, minFocusDist=closest]
+                builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, FOCUS_DISTANCES[proFocusIndex].coerceIn(0f, minFocusDist))
+            }
+        }
+    }
+
     private fun updateGalleryThumbnail() {
         lifecycleScope.launch {
             val id = withContext(Dispatchers.IO) {
@@ -691,13 +829,33 @@ class CameraFragment : Fragment() {
     private fun setZoom(zoom: Float) {
         currentZoom = zoom
         applyPreviewSettings()
+        showZoomIndicator(zoom)
+    }
+
+    private val zoomIndicatorHideRunnable = Runnable {
+        _fragmentCameraBinding?.zoomIndicator?.animate()
+            ?.alpha(0f)?.setDuration(250)
+            ?.withEndAction { _fragmentCameraBinding?.zoomIndicator?.visibility = View.GONE }
+            ?.start()
+    }
+
+    private fun showZoomIndicator(zoom: Float) {
+        val indicator = _fragmentCameraBinding?.zoomIndicator ?: return
+        indicator.removeCallbacks(zoomIndicatorHideRunnable)
+        indicator.text = "%.1f×".format(zoom)
+        indicator.alpha = 1f
+        indicator.visibility = View.VISIBLE
+        indicator.postDelayed(zoomIndicatorHideRunnable, 1500)
     }
 
     private fun applyPreviewSettings() {
         if (!::session.isInitialized || !::camera.isInitialized || !::characteristics.isInitialized) return
+        // May be invoked from delayed coroutines (tap-to-focus reset) after view teardown
+        val previewSurface = _fragmentCameraBinding?.viewFinder?.holder?.surface ?: return
+        if (!previewSurface.isValid) return
         try {
             val builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-            builder.addTarget(fragmentCameraBinding.viewFinder.holder.surface)
+            builder.addTarget(previewSurface)
 
             val zoomRange = characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
             if (zoomRange != null) {
@@ -708,8 +866,8 @@ class CameraFragment : Fragment() {
                 val cx = rect.width() / 2
                 val cy = rect.height() / 2
                 currentZoom = currentZoom.coerceIn(1f, maxZoom)
-                val dx = (0.5f * rect.width() / currentZoom).toInt()
-                val dy = (0.5f * rect.height() / currentZoom).toInt()
+                val dx = (0.5f * rect.width() / currentZoom).toInt().coerceAtLeast(1)
+                val dy = (0.5f * rect.height() / currentZoom).toInt().coerceAtLeast(1)
                 builder.set(CaptureRequest.SCALER_CROP_REGION, Rect(cx - dx, cy - dy, cx + dx, cy + dy))
             }
 
@@ -717,6 +875,8 @@ class CameraFragment : Fragment() {
             if (maxAfRegions > 0) currentAfRegions?.let { builder.set(CaptureRequest.CONTROL_AF_REGIONS, it) }
             val maxAeRegions = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0
             if (maxAeRegions > 0) currentAeRegions?.let { builder.set(CaptureRequest.CONTROL_AE_REGIONS, it) }
+
+            applyProControls(builder)
 
             session.setRepeatingRequest(builder.build(), null, cameraHandler)
         } catch (e: Exception) {
@@ -762,12 +922,14 @@ class CameraFragment : Fragment() {
 
         val sx = (x / vw * sensorSize.width()).toInt().coerceIn(0, sensorSize.width() - 1)
         val sy = (y / vh * sensorSize.height()).toInt().coerceIn(0, sensorSize.height() - 1)
-        val half = (sensorSize.width() * 0.08f).toInt()
+        val half = (sensorSize.width() * 0.08f).toInt().coerceAtLeast(1)
         val left = (sx - half).coerceAtLeast(0)
         val top = (sy - half).coerceAtLeast(0)
-        val right = (sx + half).coerceAtMost(sensorSize.width())
-        val bottom = (sy + half).coerceAtMost(sensorSize.height())
-        val region = MeteringRectangle(left, top, right - left, bottom - top, MeteringRectangle.METERING_WEIGHT_MAX)
+        val right = (sx + half).coerceAtMost(sensorSize.width() - 1)
+        val bottom = (sy + half).coerceAtMost(sensorSize.height() - 1)
+        val w = (right - left).coerceAtLeast(1)
+        val h = (bottom - top).coerceAtLeast(1)
+        val region = MeteringRectangle(left, top, w, h, MeteringRectangle.METERING_WEIGHT_MAX)
 
         currentAfRegions = arrayOf(region)
         currentAeRegions = arrayOf(region)
@@ -775,8 +937,12 @@ class CameraFragment : Fragment() {
         try {
             val builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             builder.addTarget(fragmentCameraBinding.viewFinder.holder.surface)
-            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
-            builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START)
+            val availableAfModes = characteristics.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES) ?: intArrayOf()
+            val supportsAfAuto = CameraMetadata.CONTROL_AF_MODE_AUTO in availableAfModes
+            if (supportsAfAuto) {
+                builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
+                builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START)
+            }
             val maxAfRegions = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) ?: 0
             if (maxAfRegions > 0) builder.set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(region))
             val maxAeRegions = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0
@@ -873,30 +1039,40 @@ class CameraFragment : Fragment() {
     }
 
     private suspend fun takePhoto(): CombinedCaptureResult = suspendCancellableCoroutine { cont ->
-        while (imageReader.acquireNextImage() != null) {}
+        Log.i(CRUMB, "takePhoto: start | format=$selectedFormat zoom=$currentZoom lens=${selectedLens?.name} buffers=${imageReader.maxImages}")
+        Log.i(CRUMB, "takePhoto: draining stale images")
+        while (true) { val img = imageReader.acquireNextImage() ?: break; img.close() }
 
         val imageQueue = ArrayBlockingQueue<Image>(IMAGE_BUFFER_SIZE)
         imageReader.setOnImageAvailableListener({ reader ->
-            val image = reader.acquireNextImage()
-            imageQueue.add(image)
+            val image = reader.acquireNextImage() ?: return@setOnImageAvailableListener
+            // offer (not add) so a full queue never throws; close the buffer if it can't be queued
+            if (!imageQueue.offer(image)) image.close()
         }, imageReaderHandler)
 
+        Log.i(CRUMB, "takePhoto: building STILL_CAPTURE request")
         val captureRequest = session.device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
             .apply {
                 addTarget(imageReader.surface)
                 val zoomRange = characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
                 if (zoomRange != null) {
-                    set(CaptureRequest.CONTROL_ZOOM_RATIO, currentZoom)
+                    // Clamp — currentZoom may hold an unvalidated telephoto focal ratio
+                    set(CaptureRequest.CONTROL_ZOOM_RATIO, currentZoom.coerceIn(zoomRange.lower, zoomRange.upper))
                 } else {
+                    val maxZoom = characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM) ?: 1.0f
+                    val safeZoom = currentZoom.coerceIn(1f, maxZoom)
                     val rect = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)!!
                     val centerX = rect.width() / 2
                     val centerY = rect.height() / 2
-                    val deltaX = (0.5f * rect.width() / currentZoom).toInt()
-                    val deltaY = (0.5f * rect.height() / currentZoom).toInt()
+                    // Floor deltas at 1px so the crop can never collapse to a zero-width rect
+                    val deltaX = (0.5f * rect.width() / safeZoom).toInt().coerceAtLeast(1)
+                    val deltaY = (0.5f * rect.height() / safeZoom).toInt().coerceAtLeast(1)
                     val crop = Rect(centerX - deltaX, centerY - deltaY, centerX + deltaX, centerY + deltaY)
                     set(CaptureRequest.SCALER_CROP_REGION, crop)
                 }
+                applyProControls(this, isCapture = true)
             }
+        Log.i(CRUMB, "takePhoto: request built, calling session.capture() <-- last app step before HAL")
         session.capture(captureRequest.build(), object : CameraCaptureSession.CaptureCallback() {
             override fun onCaptureStarted(
                 session: CameraCaptureSession,
@@ -905,6 +1081,7 @@ class CameraFragment : Fragment() {
                 frameNumber: Long
             ) {
                 super.onCaptureStarted(session, request, timestamp, frameNumber)
+                Log.i(CRUMB, "takePhoto: onCaptureStarted (HAL accepted request, frame=$frameNumber)")
             }
 
             override fun onCaptureCompleted(
@@ -913,6 +1090,7 @@ class CameraFragment : Fragment() {
                 result: TotalCaptureResult
             ) {
                 super.onCaptureCompleted(session, request, result)
+                Log.i(CRUMB, "takePhoto: onCaptureCompleted (HAL finished exposure, dequeuing image)")
                 val resultTimestamp = result.get(CaptureResult.SENSOR_TIMESTAMP)
                 val exc = TimeoutException("Image dequeuing took too long")
                 val timeoutRunnable = Runnable { cont.resumeWithException(exc) }
@@ -970,52 +1148,94 @@ class CameraFragment : Fragment() {
             cont.resumeWithException(RuntimeException("No output format selected"))
             return@suspendCoroutine
         }
+        Log.i(CRUMB, "saveResult: format=$outputFormat imageFormat=${result.format}")
 
         var bitmap: Bitmap? = null
 
         // Get the image data
         when (result.format) {
             ImageFormat.RAW_SENSOR -> {
+                Log.i(CRUMB, "saveResult: creating DngCreator <-- native RAW encode")
                 val dngCreator = DngCreator(characteristics, result.metadata)
-                if (outputFormat == "RAW") {
-                    dngCreator.setOrientation(result.orientation)
-                    val filename = "RAW_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.dng"
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        val contentValues = android.content.ContentValues().apply {
-                            put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
-                            put(MediaStore.MediaColumns.MIME_TYPE, "image/x-adobe-dng")
-                            put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DCIM}/Camera")
+                try {
+                    if (outputFormat == "RAW") {
+                        dngCreator.setOrientation(result.orientation)
+                        val filename = "RAW_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.dng"
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            val contentValues = android.content.ContentValues().apply {
+                                put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                                put(MediaStore.MediaColumns.MIME_TYPE, "image/x-adobe-dng")
+                                put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DCIM}/Camera")
+                            }
+                            val resolver = requireContext().contentResolver
+                            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                                ?: throw IOException("Failed to create MediaStore entry")
+                            resolver.openOutputStream(uri)?.use { stream -> dngCreator.writeImage(stream, result.image) }
+                            cont.resume(File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera"), filename))
+                        } else {
+                            val file = File(
+                                File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera").apply { mkdirs() },
+                                filename
+                            )
+                            FileOutputStream(file).use { outputStream -> dngCreator.writeImage(outputStream, result.image) }
+                            cont.resume(file)
                         }
-                        val resolver = requireContext().contentResolver
-                        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-                            ?: throw IOException("Failed to create MediaStore entry")
-                        resolver.openOutputStream(uri)?.use { stream -> dngCreator.writeImage(stream, result.image) }
-                        cont.resume(File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera"), filename))
                     } else {
-                        val file = File(
-                            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera").apply { mkdirs() },
-                            filename
-                        )
-                        FileOutputStream(file).use { outputStream -> dngCreator.writeImage(outputStream, result.image) }
-                        cont.resume(file)
+                        val tempDngFile = File(requireContext().cacheDir, "temp.dng")
+                        FileOutputStream(tempDngFile).use { outputStream ->
+                            dngCreator.writeImage(outputStream, result.image)
+                        }
+                        bitmap = BitmapFactory.decodeFile(tempDngFile.absolutePath)
+                        tempDngFile.delete()
                     }
-                    return@suspendCoroutine
-                } else {
-                    val tempDngFile = File(requireContext().cacheDir, "temp.dng")
-                    FileOutputStream(tempDngFile).use { outputStream ->
-                        dngCreator.writeImage(outputStream, result.image)
-                    }
-                    bitmap = BitmapFactory.decodeFile(tempDngFile.absolutePath)
-                    tempDngFile.delete()
+                } finally {
+                    dngCreator.close()
                 }
+                if (outputFormat == "RAW") return@suspendCoroutine
             }
             ImageFormat.YUV_420_888 -> {
                 bitmap = convertYUV420888toRGB(result.image)
             }
             ImageFormat.JPEG -> {
                 val buffer = result.image.planes[0].buffer
-                val bytes = ByteArray(buffer.remaining())
-                buffer.get(bytes)
+                val bytes = ByteArray(buffer.remaining()).apply { buffer.get(this) }
+
+                if (!isWatermarkEnabled) {
+                    // Fast path: write bytes directly — no decode/re-encode, full ISP quality preserved
+                    val filename = "IMG_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.jpg"
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val contentValues = android.content.ContentValues().apply {
+                            put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                            put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DCIM}/Camera")
+                        }
+                        val resolver = requireContext().contentResolver
+                        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                            ?: throw IOException("Failed to create MediaStore entry")
+                        resolver.openOutputStream(uri)?.use { it.write(bytes) }
+                        resolver.openFileDescriptor(uri, "rw")?.use { pfd ->
+                            ExifInterface(pfd.fileDescriptor).apply {
+                                setAttribute(ExifInterface.TAG_ORIENTATION, result.orientation.toString())
+                                saveAttributes()
+                            }
+                        }
+                        cont.resume(File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera"), filename))
+                    } else {
+                        val file = File(
+                            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera").apply { mkdirs() },
+                            filename
+                        )
+                        FileOutputStream(file).use { it.write(bytes) }
+                        ExifInterface(file.absolutePath).apply {
+                            setAttribute(ExifInterface.TAG_ORIENTATION, result.orientation.toString())
+                            saveAttributes()
+                        }
+                        cont.resume(file)
+                    }
+                    return@suspendCoroutine
+                }
+
+                // Slow path: watermark requires decode → composite → re-encode
                 bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
             }
             ImageFormat.HEIC -> {
@@ -1136,8 +1356,38 @@ class CameraFragment : Fragment() {
 
     companion object {
         private val TAG = CameraFragment::class.java.simpleName
+        // Dedicated tag for capture-pipeline breadcrumbs — grep this in the live USB log to
+        // see the exact last app step before a HAL/kernel crash. (See capture-logs.ps1)
+        private const val CRUMB = "JPCAP"
         private const val IMAGE_BUFFER_SIZE: Int = 3
+        private const val RAW_BUFFER_SIZE: Int = 2
         private const val IMAGE_CAPTURE_TIMEOUT_MILLIS: Long = 5000
+
+        // PRO mode control value lists (index 0 is always AUTO)
+        val ISO_VALUES = listOf("AUTO", "50", "100", "200", "400", "800", "1600", "3200")
+        val SHUTTER_VALUES = listOf(
+            "AUTO", "1/4000", "1/2000", "1/1000", "1/500", "1/250",
+            "1/125", "1/60", "1/30", "1/15", "1/8", "1/4", "1/2", "1\"", "2\"", "4\""
+        )
+        val SHUTTER_NANOS = listOf(
+            0L, 250_000L, 500_000L, 1_000_000L, 2_000_000L, 4_000_000L,
+            8_000_000L, 16_666_667L, 33_333_333L, 66_666_667L,
+            125_000_000L, 250_000_000L, 500_000_000L,
+            1_000_000_000L, 2_000_000_000L, 4_000_000_000L
+        )
+        val WB_LABELS = listOf("AUTO", "Sunny", "Cloudy", "Shade", "Tungsten", "Fluor.")
+        val WB_MODES = listOf(
+            CameraMetadata.CONTROL_AWB_MODE_AUTO,
+            CameraMetadata.CONTROL_AWB_MODE_DAYLIGHT,
+            CameraMetadata.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT,
+            CameraMetadata.CONTROL_AWB_MODE_SHADE,
+            CameraMetadata.CONTROL_AWB_MODE_INCANDESCENT,
+            CameraMetadata.CONTROL_AWB_MODE_FLUORESCENT
+        )
+        val EV_VALUES = listOf("-3", "-2", "-1", "-½", "0", "+½", "+1", "+2", "+3")
+        val EV_FLOATS = listOf(-3f, -2f, -1f, -0.5f, 0f, 0.5f, 1f, 2f, 3f)
+        val FOCUS_LABELS = listOf("AUTO", "∞", "Far", "Mid", "Near", "Macro")
+        val FOCUS_DISTANCES = listOf(Float.MAX_VALUE, 0f, 0.2f, 0.8f, 2.0f, 10.0f)
 
         data class CombinedCaptureResult(
             val image: Image,
