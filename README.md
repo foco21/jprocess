@@ -1,7 +1,8 @@
-![logo-sm](https://github.com/foco21/jprocess/blob/main/unprocess%20j%20logo%202.png)
+<p align="center">
+  <img src="logo.png" alt="JuneProcess logo" width="200">
+</p>
 
-junprocess
-===========================
+<h1 align="center">JuneProcess</h1>
 
 This project is based on https://github.com/android/camera-samples/tree/main/Camera2Basic and is a
 simple, open source solution to taking unprocessed images on your Android phone, free of
