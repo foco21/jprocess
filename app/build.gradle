@@ -19,16 +19,25 @@ apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-kapt'
 apply plugin: "androidx.navigation.safeargs"
 
+// Release signing — credentials live in keystore.properties (gitignored), never in version control.
+// If the file is absent (e.g. a contributor without the key), release falls back to the debug key.
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+def hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace = "com.reilandeubank.unprocess"
     compileSdkVersion 35
     defaultConfig {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        applicationId "com.reilandeubank.unprocess"
+        applicationId "com.midsummerdream.juneprocess"
         minSdkVersion 21
         targetSdkVersion 35
-        versionCode 5
-        versionName "0.3.0 horizon"
+        versionCode 23
+        versionName "0.3.1 man of war"
     }
 
     compileOptions {
@@ -40,11 +49,22 @@ android {
         jvmTarget = "$rootProject.ext.java_version"
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            release {
+                storeFile rootProject.file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.debug
+            signingConfig hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug
             buildConfigField "boolean", "BETA", "true"
         }
         debug {

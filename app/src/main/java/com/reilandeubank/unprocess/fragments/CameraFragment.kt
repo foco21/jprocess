@@ -21,6 +21,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.*
+import android.graphics.drawable.GradientDrawable
 import android.hardware.camera2.*
 import android.media.Image
 import android.media.ImageReader
@@ -41,6 +42,7 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.MotionEvent
+import android.view.OrientationEventListener
 import android.view.ScaleGestureDetector
 import android.view.Surface
 import android.view.SurfaceHolder
@@ -165,6 +167,12 @@ class CameraFragment : Fragment() {
     private var proEvIndex = 4       // index 4 = 0 EV
     private var proFocusIndex = 0    // 0 = AUTO (AF)
 
+    // Sensor-driven UI rotation — spins the corner controls in place so they stay upright
+    // when the phone is held sideways (the layout itself stays locked to portrait).
+    private var orientationListener: OrientationEventListener? = null
+    private var uiCardinal = 0f      // last snapped orientation: 0/90/180/270 (for change detection)
+    private var uiRotation = 0f      // continuous applied rotation (shortest-path, absolute)
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -195,6 +203,47 @@ class CameraFragment : Fragment() {
             _fragmentCameraBinding?.proControlsScroll?.visibility =
                 if (fmt == "RAW") View.VISIBLE else View.GONE
         }
+        if (orientationListener == null) setupOrientationListener()
+        orientationListener?.enable()
+    }
+
+    override fun onPause() {
+        orientationListener?.disable()
+        super.onPause()
+    }
+
+    /** Watches physical device rotation and counter-rotates the corner controls so they stay
+     *  upright in landscape, while the layout itself remains portrait-locked. */
+    private fun setupOrientationListener() {
+        orientationListener = object : OrientationEventListener(requireContext().applicationContext) {
+            override fun onOrientationChanged(orientation: Int) {
+                if (orientation == ORIENTATION_UNKNOWN) return
+                val target = when {
+                    orientation >= 315 || orientation < 45 -> 0f
+                    orientation < 135 -> 270f   // device rotated clockwise -> counter-rotate
+                    orientation < 225 -> 180f
+                    else -> 90f
+                }
+                if (target != uiCardinal) rotateControls(target)
+            }
+        }
+    }
+
+    private fun rotateControls(targetCardinal: Float) {
+        val binding = _fragmentCameraBinding ?: return
+        uiCardinal = targetCardinal
+        // Express the target as a continuous angle closest to where we are, so the spin takes the
+        // short way AND always lands exactly on a cardinal angle even if a previous spin is mid-flight.
+        var newRotation = targetCardinal
+        while (newRotation - uiRotation > 180f) newRotation -= 360f
+        while (newRotation - uiRotation < -180f) newRotation += 360f
+        uiRotation = newRotation
+        listOfNotNull(
+            binding.settingsButton,
+            binding.timerButton,
+            binding.timerLabel,
+            binding.galleryButton
+        ).forEach { it.animate().rotation(newRotation).setDuration(250).start() }
     }
 
     @SuppressLint("MissingPermission")
@@ -204,6 +253,29 @@ class CameraFragment : Fragment() {
         if (glyphHelper == null) {
             glyphHelper = GlyphHelper(requireContext()).also { it.init() }
         }
+
+        // Control deck below the 3:4 preview — a rounded-top card in the Material You surface color
+        // (dynamic where available on Android 12+, black otherwise). The controls render on top of it.
+        val deckColor = if (com.google.android.material.color.DynamicColors.isDynamicColorAvailable()) {
+            com.google.android.material.color.MaterialColors.getColor(
+                fragmentCameraBinding.root,
+                com.google.android.material.R.attr.colorSurfaceContainerHighest,
+                Color.BLACK
+            )
+        } else {
+            Color.BLACK
+        }
+        val deckRadius = 32 * resources.displayMetrics.density
+        fragmentCameraBinding.bottomDeck?.background = GradientDrawable().apply {
+            setColor(deckColor)
+            // round the top corners only — the deck overlaps the bottom of the preview, so the
+            // rounded corners reveal the live preview behind them (card-over-viewfinder look).
+            cornerRadii = floatArrayOf(deckRadius, deckRadius, deckRadius, deckRadius, 0f, 0f, 0f, 0f)
+        }
+        // Behind the preview itself the root is black; the deck (above) covers everything below it.
+
+        // Format quick-switch: cycle through the formats this device supports.
+        fragmentCameraBinding.formatButton?.setOnClickListener { cycleFormat() }
 
         // Programmatically set the colors for the zoom buttons to avoid inflation errors
         val colorSurface = com.google.android.material.R.attr.colorSurface
@@ -550,7 +622,13 @@ class CameraFragment : Fragment() {
             SurfaceHolder::class.java,
             aspectRatio = aspectRatio
         )
-        fragmentCameraBinding.viewFinder.setAspectRatio(previewSize.width, previewSize.height)
+        // The app is portrait-locked, so the viewfinder must always use a PORTRAIT ratio. Cameras
+        // usually report preview sizes in landscape, but some report portrait — using min/max here
+        // guarantees a portrait ratio either way, so the preview never gets scaled non-uniformly
+        // (stretched) regardless of how the device reports sizes. The still capture is unaffected.
+        val shortSide = minOf(previewSize.width, previewSize.height)
+        val longSide = maxOf(previewSize.width, previewSize.height)
+        fragmentCameraBinding.viewFinder.setAspectRatio(shortSide, longSide)
 
         try {
             camera = openCamera(cameraManager, cameraId, cameraHandler)
@@ -603,6 +681,7 @@ class CameraFragment : Fragment() {
 
         fragmentCameraBinding.proControlsScroll?.visibility =
             if (selectedFormat == "RAW") View.VISIBLE else View.GONE
+        updateFormatLabel()
 
         setZoom(1.0f)
         setupTouchGestures()
@@ -708,6 +787,36 @@ class CameraFragment : Fragment() {
             lbl.text = "${timerSeconds}s"
             lbl.visibility = View.VISIBLE
             btn.alpha = 1.0f
+        }
+    }
+
+    /** Short label shown on the format quick-switch button. */
+    private fun formatAbbrev(fmt: String?): String = when (fmt) {
+        "RAW" -> "RAW"
+        "PNG" -> "PNG"
+        "HEIC" -> "HEIC"
+        else -> "JPG"
+    }
+
+    private fun updateFormatLabel() {
+        _fragmentCameraBinding?.formatLabel?.text = formatAbbrev(selectedFormat)
+    }
+
+    /** Cycle through the formats the current lens supports, persist the choice, and reopen the
+     *  camera/session for the new format (same flow as switching lenses). */
+    private fun cycleFormat() {
+        val supported = selectedLens?.supportedFormats?.distinct() ?: return
+        if (supported.isEmpty()) return
+        val current = selectedFormat ?: supported.first()
+        val next = supported[(supported.indexOf(current).coerceAtLeast(0) + 1) % supported.size]
+        requireContext().getSharedPreferences("unprocess_prefs", Context.MODE_PRIVATE)
+            .edit().putString("preferred_format", next).apply()
+        selectedFormat = next
+        updateFormatLabel()
+        lifecycleScope.launch(Dispatchers.Main) {
+            if (::camera.isInitialized) camera.close()
+            if (::imageReader.isInitialized) imageReader.close()
+            initializeCamera()
         }
     }
 
@@ -848,39 +957,78 @@ class CameraFragment : Fragment() {
         indicator.postDelayed(zoomIndicatorHideRunnable, 1500)
     }
 
-    private fun applyPreviewSettings() {
-        if (!::session.isInitialized || !::camera.isInitialized || !::characteristics.isInitialized) return
+    /**
+     * Builds a preview request carrying the FULL current state — zoom/crop, metering regions,
+     * PRO controls, stabilization. Shared by both the repeating preview and the tap-to-focus
+     * one-shot so they're identical; a logical multi-camera therefore never hops to a different
+     * sub-lens / FOV on tap (which caused the "jump to ultra-wide + freeze" on tap).
+     */
+    private fun buildPreviewRequest(): CaptureRequest.Builder? {
+        if (!::session.isInitialized || !::camera.isInitialized || !::characteristics.isInitialized) return null
         // May be invoked from delayed coroutines (tap-to-focus reset) after view teardown
-        val previewSurface = _fragmentCameraBinding?.viewFinder?.holder?.surface ?: return
-        if (!previewSurface.isValid) return
+        val previewSurface = _fragmentCameraBinding?.viewFinder?.holder?.surface ?: return null
+        if (!previewSurface.isValid) return null
+
+        val builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+        builder.addTarget(previewSurface)
+
+        val zoomRange = characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
+        if (zoomRange != null) {
+            builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, currentZoom.coerceIn(zoomRange.lower, zoomRange.upper))
+        } else {
+            val maxZoom = characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM) ?: 1.0f
+            val rect = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)!!
+            val cx = rect.width() / 2
+            val cy = rect.height() / 2
+            currentZoom = currentZoom.coerceIn(1f, maxZoom)
+            val dx = (0.5f * rect.width() / currentZoom).toInt().coerceAtLeast(1)
+            val dy = (0.5f * rect.height() / currentZoom).toInt().coerceAtLeast(1)
+            builder.set(CaptureRequest.SCALER_CROP_REGION, Rect(cx - dx, cy - dy, cx + dx, cy + dy))
+        }
+
+        val maxAfRegions = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) ?: 0
+        if (maxAfRegions > 0) currentAfRegions?.let { builder.set(CaptureRequest.CONTROL_AF_REGIONS, it) }
+        val maxAeRegions = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0
+        if (maxAeRegions > 0) currentAeRegions?.let { builder.set(CaptureRequest.CONTROL_AE_REGIONS, it) }
+
+        applyProControls(builder)
+        applyStabilization(builder)
+        return builder
+    }
+
+    private fun applyPreviewSettings() {
         try {
-            val builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-            builder.addTarget(previewSurface)
-
-            val zoomRange = characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
-            if (zoomRange != null) {
-                builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, currentZoom.coerceIn(zoomRange.lower, zoomRange.upper))
-            } else {
-                val maxZoom = characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM) ?: 1.0f
-                val rect = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)!!
-                val cx = rect.width() / 2
-                val cy = rect.height() / 2
-                currentZoom = currentZoom.coerceIn(1f, maxZoom)
-                val dx = (0.5f * rect.width() / currentZoom).toInt().coerceAtLeast(1)
-                val dy = (0.5f * rect.height() / currentZoom).toInt().coerceAtLeast(1)
-                builder.set(CaptureRequest.SCALER_CROP_REGION, Rect(cx - dx, cy - dy, cx + dx, cy + dy))
-            }
-
-            val maxAfRegions = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) ?: 0
-            if (maxAfRegions > 0) currentAfRegions?.let { builder.set(CaptureRequest.CONTROL_AF_REGIONS, it) }
-            val maxAeRegions = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0
-            if (maxAeRegions > 0) currentAeRegions?.let { builder.set(CaptureRequest.CONTROL_AE_REGIONS, it) }
-
-            applyProControls(builder)
-
+            val builder = buildPreviewRequest() ?: return
             session.setRepeatingRequest(builder.build(), null, cameraHandler)
         } catch (e: Exception) {
             Log.w(TAG, "applyPreviewSettings skipped: ${e.message}")
+        }
+    }
+
+    /**
+     * Smooths the preview (kills the rolling-shutter "jelly" when panning) by turning on EIS
+     * and OIS — but ONLY if the device's HAL advertises them. Unsupported devices are left
+     * untouched, so this can never destabilize a HAL that doesn't offer stabilization.
+     * Applied to the preview only; the RAW still capture stays unprocessed (no EIS crop/warp).
+     */
+    private fun applyStabilization(builder: CaptureRequest.Builder) {
+        val videoModes = characteristics.get(
+            CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES
+        ) ?: intArrayOf()
+        if (CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON in videoModes) {
+            builder.set(
+                CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
+                CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON
+            )
+        }
+        val oisModes = characteristics.get(
+            CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION
+        ) ?: intArrayOf()
+        if (CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON in oisModes) {
+            builder.set(
+                CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE,
+                CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON
+            )
         }
     }
 
@@ -935,23 +1083,20 @@ class CameraFragment : Fragment() {
         currentAeRegions = arrayOf(region)
 
         try {
-            val builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-            builder.addTarget(fragmentCameraBinding.viewFinder.holder.surface)
-            val availableAfModes = characteristics.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES) ?: intArrayOf()
-            val supportsAfAuto = CameraMetadata.CONTROL_AF_MODE_AUTO in availableAfModes
-            if (supportsAfAuto) {
-                builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
-                builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START)
+            // Refresh the repeating preview so it now meters on the tapped region — this keeps the
+            // exact zoom/FOV the user is already looking at.
+            applyPreviewSettings()
+            // Fire a one-shot AF trigger built from the SAME full preview state, so only the AF
+            // trigger differs. The logical camera has no reason to switch lens/FOV (no ultra-wide hop).
+            val builder = buildPreviewRequest()
+            if (builder != null) {
+                val availableAfModes = characteristics.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES) ?: intArrayOf()
+                if (CameraMetadata.CONTROL_AF_MODE_AUTO in availableAfModes) {
+                    builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
+                    builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START)
+                }
+                session.capture(builder.build(), null, cameraHandler)
             }
-            val maxAfRegions = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) ?: 0
-            if (maxAfRegions > 0) builder.set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(region))
-            val maxAeRegions = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0
-            if (maxAeRegions > 0) builder.set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(region))
-            val zoomRange = characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
-            if (zoomRange != null) {
-                builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, currentZoom.coerceIn(zoomRange.lower, zoomRange.upper))
-            }
-            session.capture(builder.build(), null, cameraHandler)
         } catch (e: Exception) {
             Log.w(TAG, "triggerFocusAt capture skipped: ${e.message}")
             currentAfRegions = null
@@ -1348,6 +1493,8 @@ class CameraFragment : Fragment() {
         try { (activity as? MainActivity)?.onVolumePressed = null } catch (e: Exception) { /* detached */ }
         countdownJob?.cancel()
         countdownJob = null
+        orientationListener?.disable()
+        orientationListener = null
         glyphHelper?.cleanup()
         glyphHelper = null
         _fragmentCameraBinding = null

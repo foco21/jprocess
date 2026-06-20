@@ -223,7 +223,7 @@ d) If the Work includes a "NOTICE" text file as part of its
         """.trimIndent()
 
 
-        activityAboutBinding.appNameAndVersion.text = "JuneProcess v0.3.0 horizon"
+        activityAboutBinding.appNameAndVersion.text = "JuneProcess v0.3.1 man of war"
         activityAboutBinding.forkName.text = forkName
         activityAboutBinding.originalProject.text = attributionText
         activityAboutBinding.thirdPartyLibraries.text = thirdPartyLibraries

@@ -1,9 +1,12 @@
 <resources>
 
-    <!-- Base application theme. -->
+    <!-- Base application theme. Edge-to-edge (enabled in code via setDecorFitsSystemWindows(false))
+         with fully transparent system bars. The old windowTranslucentStatus/Navigation flags drew
+         dark scrims behind the status and nav bars — that was the black strip over the preview at
+         the top and below the control deck at the bottom. Removed so the preview/deck go edge-to-edge. -->
     <style name="AppTheme" parent="Theme.Material3.DynamicColors.DayNight.NoActionBar">
-        <item name="android:windowTranslucentStatus">true</item>
-        <item name="android:windowTranslucentNavigation">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
 </resources>

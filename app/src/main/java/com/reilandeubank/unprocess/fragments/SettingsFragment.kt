@@ -243,7 +243,7 @@ class SettingsFragment : Fragment() {
             END OF TERMS AND CONDITIONS
         """.trimIndent()
 
-        binding.appNameAndVersion.text = "JuneProcess v0.3.0 horizon"
+        binding.appNameAndVersion.text = "JuneProcess v0.3.1 man of war"
         binding.forkName.text = forkName
         binding.originalProject.text = attributionText
         binding.thirdPartyLibraries.text = thirdPartyLibraries

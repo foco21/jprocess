@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rounded square background for the format quick-switch button. Tinted at runtime/layout
+     with the Material You secondary container color. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <corners android:radius="14dp" />
+    <solid android:color="#FFFFFFFF" />
+</shape>
